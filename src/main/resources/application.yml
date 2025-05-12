@@ -1,0 +1,28 @@
+server:
+  port : 8083
+spring:
+  jpa:
+    database: postgresql
+    show-sql: true
+    generate-ddl: true
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+      packages-to-scan: com.specialistapp.model.entity
+  datasource:
+    url: jdbc:postgresql://localhost:5433/specialist
+    username: postgres
+    password: 1914
+    driver-class-name: org.postgresql.Driver
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: default
+
+
+

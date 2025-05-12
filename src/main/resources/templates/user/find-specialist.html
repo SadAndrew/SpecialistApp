@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+<head>
+  <title>Find Specialist</title>
+</head>
+<body>
+<section class="container">
+  <h2 class="mb-4">Find a Specialist</h2>
+
+  <div class="mb-4">
+    <input type="text" id="specialistSearch" class="form-control" placeholder="Search by name or profession...">
+  </div>
+
+  <div class="row">
+    <div th:each="specialist : ${specialists}" class="col-md-4 mb-4">
+      <div class="card specialist-card">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top" alt="Specialist Photo">
+        <div class="card-body">
+          <h5 class="card-title specialist-name" th:text="${specialist.user.username}"></h5>
+          <h6 class="card-subtitle mb-2 text-muted specialist-profession"
+              th:text="${specialist.professionType.name}"></h6>
+          <p class="card-text" th:text="${specialist.bio}"></p>
+          <a th:href="@{/user/book-appointment/{id}(id=${specialist.id})}"
+             class="btn btn-primary">Book Appointment</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

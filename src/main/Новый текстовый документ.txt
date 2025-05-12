@@ -1,0 +1,2056 @@
+package com.specialistapp.config;
+
+
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class DatabaseInitializer {
+
+    @Bean
+    CommandLineRunner initDatabase(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        return args -> {
+            // Create initial moderator account if not exists
+            if (userRepository.findByEmail("moderator@example.com").isEmpty()) {
+                User moderator = new User();
+                moderator.setUsername("moderator");
+                moderator.setEmail("moderator@example.com");
+                moderator.setPassword(passwordEncoder.encode("securepassword"));
+                moderator.setRole("ROLE_MODERATOR");
+                userRepository.save(moderator);
+            }
+        };
+    }
+}package com.specialistapp.config;
+
+import com.specialistapp.service.CustomUserDetailsService;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+
+import java.io.IOException;
+import java.util.Set;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/", "/auth/**", "/css/**", "/js/**", "/images/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .formLogin(form -> form
+                        .loginPage("/auth/login")
+                        .loginProcessingUrl("/auth/login")
+                        .successHandler(customAuthenticationSuccessHandler()) // <-- вот оно
+                        .failureUrl("/auth/login?error=true")
+                        .permitAll()
+                )
+                .logout(logout -> logout
+                        .logoutUrl("/auth/logout")
+                        .logoutSuccessUrl("/auth/login?logout")
+                        .permitAll()
+                )
+                .csrf(csrf -> csrf.disable()); // временно для теста
+
+        return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+
+    @Bean
+    public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
+        return (request, response, authentication) -> {
+            Set<String> roles = AuthorityUtils.authorityListToSet(authentication.getAuthorities());
+
+            if (roles.contains("ROLE_SPECIALIST")) {
+                response.sendRedirect("/specialist/schedule");
+            } else if (roles.contains("ROLE_MODERATOR")) {
+                response.sendRedirect("/moderator/organizations/pending");
+            } else {
+                response.sendRedirect("/"); // Regular users go to home
+            }
+        };
+    }
+
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.Appointment;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.service.AppointmentService;
+import com.specialistapp.service.SpecialistService;
+import com.specialistapp.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+
+@Controller
+@RequestMapping("/appointments")
+public class AppointmentController {
+
+    @Autowired
+    private AppointmentService appointmentService;
+
+    @Autowired
+    private SpecialistService specialistService;
+
+    @Autowired
+    private UserService userService;
+
+    @GetMapping("/book")
+    public String showBookingForm(@RequestParam("specialistId") Long specialistId, Model model) {
+        Specialist specialist = specialistService.findById(specialistId);
+        model.addAttribute("specialist", specialist);
+        model.addAttribute("slots", appointmentService.findAvailableSlots(specialist));
+        return "appointments/book";
+    }
+
+    @PostMapping("/book")
+    public String bookAppointment(@RequestParam("specialistId") Long specialistId,
+                                  @RequestParam("slot") String slot,
+                                  @AuthenticationPrincipal UserDetails userDetails) {
+        User user = userService.findByEmail(userDetails.getUsername());
+        Specialist specialist = specialistService.findById(specialistId);
+        LocalDateTime selectedSlot = LocalDateTime.parse(slot);
+        appointmentService.createAppointment(user, specialist, selectedSlot);
+        return "redirect:/user/appointments";
+    }
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.ProfessionType;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.service.ProfessionTypeService;
+import com.specialistapp.service.RegistrationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+
+@Controller
+@RequestMapping("/auth")
+public class AuthController {
+
+    @Autowired
+    private RegistrationService registrationService;
+
+    @Autowired
+    private ProfessionTypeService professionTypeService;
+
+    @GetMapping("/login")
+    public String showLoginPage(@RequestParam(value = "error", required = false) String error,
+                                @RequestParam(value = "logout", required = false) String logout,
+                                Model model) {
+        if (error != null) {
+            model.addAttribute("error", "Invalid username or password");
+        }
+        if (logout != null) {
+            model.addAttribute("message", "You have been logged out successfully");
+        }
+        return "auth/login";
+    }
+
+    @GetMapping("/auth/register/user")
+    public String showUserRegistrationForm(Model model) {
+        model.addAttribute("user", new User());
+        model.addAttribute("title", "User Registration");
+        model.addAttribute("content", "auth/register-user");
+        return "fragments/layout";
+    }
+
+    @PostMapping("/register/user")
+    public String registerUser(@ModelAttribute User user, Model model) {
+        try {
+            registrationService.registerUser(user);
+            return "redirect:/auth/login";
+        } catch (IllegalArgumentException e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("user", user);
+            return "auth/register-user";
+        }
+    }
+
+    @GetMapping("/register/specialist")
+    public String showSpecialistRegistrationForm(Model model) {
+        List<ProfessionType> professionTypes = professionTypeService.findAll();
+        model.addAttribute("specialist", new Specialist());
+        model.addAttribute("professions", professionTypes);
+        return "auth/register-specialist";
+    }
+
+    @PostMapping("/register/specialist")
+    public String registerSpecialist(@ModelAttribute Specialist specialist,
+                                     @RequestParam("photo") MultipartFile file,
+                                     Model model) {
+        try {
+            if (!file.isEmpty()) {
+                String uploadDir = "uploads/";
+                File uploadFolder = new File(uploadDir);
+                if (!uploadFolder.exists()) {
+                    uploadFolder.mkdirs();
+                }
+                String filePath = uploadDir + file.getOriginalFilename();
+                file.transferTo(new File(filePath));
+                specialist.setPhotoUrl("/" + filePath); // <-- теперь будет работать
+            }
+
+            registrationService.registerSpecialist(specialist); // сохраняется
+            return "redirect:/auth/login?registered";
+        } catch (Exception e) {
+            model.addAttribute("error", e.getMessage());
+            model.addAttribute("specialist", specialist);
+            return "auth/register-specialist";
+        }
+    }
+
+
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.service.SpecialistService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@Controller
+public class HomeController {
+
+    @Autowired
+    private SpecialistService specialistService;
+
+    @GetMapping("/")
+    public String index(@RequestParam(value = "profession", required = false) String profession,
+                        Model model) {
+
+        List<Specialist> specialists = (profession != null && !profession.isEmpty())
+                ? specialistService.findByProfessionTypeName(profession)
+                : specialistService.findAllApprovedSpecialists();
+
+        model.addAttribute("specialists", specialists);
+        model.addAttribute("selectedProfession", profession);
+        model.addAttribute("title", "Home");
+        model.addAttribute("content", "home/index");
+
+        return "fragments/layout";
+    }
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.Organization;
+import com.specialistapp.service.ModerationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping("/moderator")
+@PreAuthorize("hasRole('MODERATOR')")
+public class ModerationController {
+
+    @Autowired
+    private ModerationService moderationService;
+
+    @GetMapping("/organizations/pending")
+    public String getPendingOrganizations(Model model) {
+        model.addAttribute("organizations", moderationService.getPendingOrganizations());
+        return "moderation/organizations";
+    }
+
+    @PostMapping("/organizations/{id}/approve")
+    public String approveOrganization(@PathVariable Long id) {
+        moderationService.approveOrganization(id);
+        return "redirect:/moderator/organizations/pending";
+    }
+
+    @PostMapping("/organizations/{id}/reject")
+    public String rejectOrganization(@PathVariable Long id) {
+        moderationService.rejectOrganization(id);
+        return "redirect:/moderator/organizations/pending";
+    }
+
+    @GetMapping("/users")
+    public String getUserManagement(Model model) {
+        model.addAttribute("users", moderationService.getAllUsers());
+        return "moderation/users";
+    }
+
+    @PostMapping("/users/{id}/delete")
+    public String deleteUser(@PathVariable Long id) {
+        moderationService.deleteUser(id);
+        return "redirect:/moderator/users";
+    }
+}package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.Review;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.service.ReviewService;
+import com.specialistapp.service.SpecialistService;
+import com.specialistapp.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@Controller
+@RequestMapping("/reviews")
+public class ReviewController {
+
+    @Autowired
+    private ReviewService reviewService;
+
+    @Autowired
+    private SpecialistService specialistService;
+
+    @Autowired
+    private UserService userService;
+
+    @GetMapping("/{specialistId}")
+    public String showSpecialistReviews(@PathVariable Long specialistId, Model model) {
+        Specialist specialist = specialistService.findById(specialistId);
+        List<Review> reviews = reviewService.findBySpecialist(specialist);
+
+        model.addAttribute("specialist", specialist);
+        model.addAttribute("reviews", reviews);
+        model.addAttribute("newReview", new Review());
+
+        return "reviews/review-list";
+    }
+
+    @PostMapping("/{specialistId}/add")
+    public String addReview(@PathVariable Long specialistId,
+                            @ModelAttribute Review newReview,
+                            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = userService.findByEmail(userDetails.getUsername());
+        Specialist specialist = specialistService.findById(specialistId);
+
+        newReview.setUser(user);
+        newReview.setSpecialist(specialist);
+
+        reviewService.save(newReview);
+
+        return "redirect:/reviews/" + specialistId;
+    }
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.ProfessionType;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.service.ProfessionTypeService;
+import com.specialistapp.service.SpecialistService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@Controller
+@RequestMapping("/search")
+public class SearchController {
+
+    @Autowired
+    private SpecialistService specialistService;
+
+    @Autowired
+    private ProfessionTypeService professionTypeService;
+
+    @GetMapping
+    public String searchSpecialists(@RequestParam(value = "name", required = false) String name,
+                                    @RequestParam(value = "professionId", required = false) Long professionId,
+                                    Model model) {
+
+        List<Specialist> specialists = specialistService.searchSpecialists(name, professionId);
+        List<ProfessionType> professions = professionTypeService.findAll();
+
+        model.addAttribute("specialists", specialists);
+        model.addAttribute("professions", professions);
+        model.addAttribute("name", name);
+        model.addAttribute("professionId", professionId);
+
+        return "search/specialists";
+    }
+}
+package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.Organization;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.service.AppointmentService;
+import com.specialistapp.service.OrganizationService;
+import com.specialistapp.service.SpecialistService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
+
+@Controller
+@RequestMapping("/specialist")
+@PreAuthorize("hasRole('SPECIALIST')")
+public class SpecialistController {
+
+    @Autowired
+    private AppointmentService appointmentService;
+
+    @Autowired
+    private SpecialistService specialistService;
+
+    @Autowired
+    private OrganizationService organizationService;
+
+    @GetMapping("/schedule")
+    public String getSchedule(Model model, Principal principal) {
+        Specialist specialist = specialistService.findByEmail(principal.getName());
+        model.addAttribute("appointments",
+                appointmentService.getSpecialistAppointments(specialist));
+        return "specialist/schedule";
+    }
+
+    @GetMapping("/organization/create")
+    public String showCreateOrganizationForm(Model model) {
+        model.addAttribute("organization", new Organization());
+        return "specialist/organization-create";
+    }
+
+    @PostMapping("/organization/create")
+    public String createOrganization(@ModelAttribute Organization organization,
+                                     Principal principal) {
+        Specialist specialist = specialistService.findByEmail(principal.getName());
+        organization.setCreatedBy(specialist);
+        organizationService.saveOrganization(organization);
+        return "redirect:/specialist/dashboard";
+    }
+    @GetMapping("/register/specialist")
+    public String showSpecialistRegistrationForm(Model model) {
+        model.addAttribute("specialist", new Specialist()); // 
+        return "auth/register-specialist";
+    }
+    @GetMapping("/specialists/find")
+    public String findSpecialists(Model model) {
+        model.addAttribute("title", "Поиск специалистов");
+        model.addAttribute("content", "specialists/find");
+        return "fragments/layout";
+    }
+
+}package com.specialistapp.controller;
+
+import com.specialistapp.model.entity.User;
+import com.specialistapp.service.AppointmentService;
+import com.specialistapp.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import java.security.Principal;
+import java.time.LocalDateTime;
+
+@Controller
+@RequestMapping("/user")
+public class UserController {
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private AppointmentService appointmentService;
+
+    @GetMapping("/profile")
+    public String userProfile(Model model, Principal principal) {
+        User user = userService.findByEmail(principal.getName());
+        model.addAttribute("title", "Профиль");
+        model.addAttribute("content", "user/profile");
+        return "fragments/layout";
+    }
+
+
+    @GetMapping("/appointments")
+    public String getUserAppointments(Model model, Principal principal) {
+        User user = userService.findByEmail(principal.getName());
+        model.addAttribute("appointments",
+                appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
+        return "user/appointments";
+    }
+
+}package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+import java.time.LocalDateTime;
+
+@Entity
+public class Appointment {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private LocalDateTime appointmentDate;
+
+    @ManyToOne
+    @JoinColumn(name = "specialist_id")
+    private Specialist specialist;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    private String description;
+
+    private boolean confirmed;
+
+    // --- Геттеры и сеттеры ---
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public LocalDateTime getAppointmentDate() {
+        return appointmentDate;
+    }
+
+    public void setAppointmentDate(LocalDateTime appointmentDate) {
+        this.appointmentDate = appointmentDate;
+    }
+
+    public Specialist getSpecialist() {
+        return specialist;
+    }
+
+    public void setSpecialist(Specialist specialist) {
+        this.specialist = specialist;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public boolean isConfirmed() {
+        return confirmed;
+    }
+
+    public void setConfirmed(boolean confirmed) {
+        this.confirmed = confirmed;
+    }
+}
+package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+import java.util.List;
+
+@Entity
+@Table(name = "organizations")
+public class Organization {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+    private String description;
+    private String logoUrl;
+    private boolean approved = false;
+
+    @ManyToOne
+    @JoinColumn(name = "created_by")
+    private Specialist createdBy;
+
+    @OneToMany(mappedBy = "organization")
+    private List<Specialist> specialists;
+
+    // Manual getters and setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getLogoUrl() {
+        return logoUrl;
+    }
+
+    public void setLogoUrl(String logoUrl) {
+        this.logoUrl = logoUrl;
+    }
+
+    public boolean isApproved() {
+        return approved;
+    }
+
+    public void setApproved(boolean approved) {
+        this.approved = approved;
+    }
+
+    public Specialist getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(Specialist createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public List<Specialist> getSpecialists() {
+        return specialists;
+    }
+
+    public void setSpecialists(List<Specialist> specialists) {
+        this.specialists = specialists;
+    }
+}package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+import java.util.List;
+
+@Entity
+@Table(name = "profession_types")
+public class ProfessionType {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name; // название профессии
+
+    @OneToMany(mappedBy = "professionType")
+    private List<Specialist> specialists;
+
+    // Getters и Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "reviews")
+public class Review {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @ManyToOne
+    @JoinColumn(name = "specialist_id")
+    private Specialist specialist;
+
+    private int rating;
+    private String comment;
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    // Explicit getters and setters (though @Data should generate them)
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public Specialist getSpecialist() {
+        return specialist;
+    }
+
+    public void setSpecialist(Specialist specialist) {
+        this.specialist = specialist;
+    }
+
+    public int getRating() {
+        return rating;
+    }
+
+    public void setRating(int rating) {
+        this.rating = rating;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+}package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "specialists")
+@PrimaryKeyJoinColumn(name = "user_id")
+public class Specialist extends User {
+
+    private String bio;
+    private String photoUrl; // ссылка на загруженное фото
+    private String workSchedule;
+
+
+    @ManyToOne
+    @JoinColumn(name = "profession_type_id")
+    private ProfessionType professionType;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
+    public void setPhotoUrl(String s) {
+        this.photoUrl = s;
+    }
+    public ProfessionType getProfessionType() {
+        return professionType;
+    }
+
+    public void setProfessionType(ProfessionType professionType) {
+        this.professionType = professionType;
+    }
+
+
+}
+package com.specialistapp.model.entity;
+
+import jakarta.persistence.*;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+
+@Entity
+@Table(name = "users")
+@Inheritance(strategy = InheritanceType.JOINED)
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true)
+    @NotBlank(message = "Username is required")
+    @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
+    private String username;
+
+    @Column(unique = true)
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email should be valid")
+    private String email;
+
+    @Column(unique = true)
+    private String phone;
+
+    @NotBlank(message = "Password is required")
+    private String password;
+
+    private String role;
+    private String telegramId;
+
+    // Getters и Setters
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public String getUsername() {
+        return username;
+    }
+    public void setUsername(String username) {
+        this.username = username;
+    }
+    public String getEmail() {
+        return email;
+    }
+    public void setEmail(String email) {
+        this.email = email;
+    }
+    public String getPhone() {
+        return phone;
+    }
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+    public String getPassword() {
+        return password;
+    }
+    public void setPassword(String password) {
+        this.password = password;
+    }
+    public String getRole() {
+        return role;
+    }
+    public void setRole(String role) {
+        this.role = role;
+    }
+    public String getTelegramId() {
+        return telegramId;
+    }
+    public void setTelegramId(String telegramId) {
+        this.telegramId = telegramId;
+    }
+}
+package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.Appointment;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+
+    List<Appointment> findBySpecialistOrderByAppointmentDate(Specialist specialist);
+
+    List<Appointment> findBySpecialistAndAppointmentDateAfter(Specialist specialist, LocalDateTime now);
+
+    @Query("SELECT a FROM Appointment a WHERE a.specialist = :specialist " +
+            "AND a.appointmentDate BETWEEN :start AND :end " +
+            "ORDER BY a.appointmentDate")
+    List<Appointment> findBySpecialistAndAppointmentDateBetween(
+            @Param("specialist") Specialist specialist,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    @Query("SELECT a FROM Appointment a WHERE a.user.id = :userId " +
+            "AND a.appointmentDate >= :now " +
+            "ORDER BY a.appointmentDate")
+    List<Appointment> findUpcomingByUser(@Param("userId") Long userId,
+                                         @Param("now") LocalDateTime now);
+
+    List<Appointment> findByUser(User user);
+
+    List<Appointment> findByUserAndAppointmentDateAfter(User user, LocalDateTime time);
+}
+package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.Organization;
+import com.specialistapp.model.entity.Specialist;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface OrganizationRepository extends JpaRepository<Organization, Long> {
+    List<Organization> findByApprovedFalse();
+
+    List<Organization> findByCreatedBy(Specialist specialist);
+
+    @Query("SELECT o FROM Organization o JOIN o.specialists s WHERE s.id = :specialistId")
+    List<Organization> findBySpecialistMember(@Param("specialistId") Long specialistId);
+}package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.ProfessionType;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ProfessionTypeRepository extends JpaRepository<ProfessionType, Long> {
+}
+package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.Review;
+import com.specialistapp.model.entity.Specialist;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface ReviewRepository extends JpaRepository<Review, Long> {
+    List<Review> findBySpecialist(Specialist specialist);
+}package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.Specialist;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
+
+public interface SpecialistRepository extends JpaRepository<Specialist, Long> {
+    @Query("SELECT s FROM Specialist s WHERE s.professionType.id = :professionTypeId")
+    List<Specialist> findByProfessionTypeId(@Param("professionTypeId") Long professionTypeId);
+
+    @Query("SELECT s FROM Specialist s WHERE s.organization.id = :organizationId")
+    List<Specialist> findByOrganizationId(@Param("organizationId") Long organizationId);
+    @Query("SELECT s FROM Specialist s WHERE " +
+            "(:name IS NULL OR LOWER(s.username) LIKE LOWER(CONCAT('%', :name, '%'))) " +
+            "AND (:professionId IS NULL OR s.professionType.id = :professionId)")
+    List<Specialist> searchSpecialists(String name, Long professionId);
+    List<Specialist> findByOrganization_ApprovedTrue();
+    List<Specialist> findByProfessionType_NameAndOrganization_ApprovedTrue(String name);
+}package com.specialistapp.model.repository;
+
+import com.specialistapp.model.entity.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+    Optional<User> findByUsername(String username);
+
+    @Query("SELECT u FROM User u WHERE u.role = :role")
+    List<User> findByRole(@Param("role") String role);
+
+    @Query("SELECT u FROM User u WHERE u.role IN ('ROLE_USER', 'ROLE_SPECIALIST')")
+    List<User> findAllRegularUsers();
+}package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Appointment;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.AppointmentRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class AppointmentService {
+
+    private static final Duration APPOINTMENT_DURATION = Duration.ofMinutes(30);
+    private static final LocalTime WORKDAY_START = LocalTime.of(9, 0);
+    private static final LocalTime WORKDAY_END = LocalTime.of(17, 0);
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    public Appointment createAppointment(User user, Specialist specialist, LocalDateTime time) {
+        if (!isTimeSlotAvailable(specialist, time)) {
+            throw new IllegalArgumentException("Time slot not available");
+        }
+
+        Appointment appointment = new Appointment();
+        appointment.setUser(user);
+        appointment.setSpecialist(specialist);
+        appointment.setAppointmentDate(time);
+        return appointmentRepository.save(appointment);
+    }
+
+    public List<LocalDateTime> findAvailableSlots(Specialist specialist) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startDate = now.withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime endDate = startDate.plusDays(7);
+
+        List<Appointment> existingAppointments = appointmentRepository
+                .findBySpecialistAndAppointmentDateBetween(specialist, startDate, endDate);
+
+        List<LocalDateTime> availableSlots = new ArrayList<>();
+
+        for (int day = 0; day < 7; day++) {
+            LocalDateTime currentDay = startDate.plusDays(day);
+
+            if (currentDay.getDayOfWeek().getValue() >= 6) continue;
+
+            LocalDateTime slot = currentDay.with(WORKDAY_START);
+            while (slot.toLocalTime().isBefore(WORKDAY_END)) {
+                if (isTimeSlotAvailable(specialist, slot, existingAppointments)) {
+                    availableSlots.add(slot);
+                }
+                slot = slot.plus(APPOINTMENT_DURATION);
+            }
+        }
+
+        return availableSlots.stream()
+                .sorted(Comparator.naturalOrder())
+                .collect(Collectors.toList());
+    }
+
+    private boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time) {
+        List<Appointment> conflicting = appointmentRepository
+                .findBySpecialistAndAppointmentDateBetween(
+                        specialist,
+                        time.minus(APPOINTMENT_DURATION),
+                        time.plus(APPOINTMENT_DURATION)
+                );
+        return conflicting.isEmpty();
+    }
+
+    private boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time,
+                                        List<Appointment> existingAppointments) {
+        return existingAppointments.stream()
+                .noneMatch(appt -> isOverlapping(appt.getAppointmentDate(), time));
+    }
+
+    private boolean isOverlapping(LocalDateTime existing, LocalDateTime newSlot) {
+        LocalDateTime existingEnd = existing.plus(APPOINTMENT_DURATION);
+        LocalDateTime newEnd = newSlot.plus(APPOINTMENT_DURATION);
+
+        return newSlot.isBefore(existingEnd) && newEnd.isAfter(existing);
+    }
+
+    public List<Appointment> getSpecialistAppointments(Specialist specialist) {
+        return appointmentRepository.findBySpecialistOrderByAppointmentDate(specialist);
+    }
+
+    public List<Appointment> findUpcomingByUser(Long userId, LocalDateTime now) {
+        return appointmentRepository.findUpcomingByUser(userId, now);
+    }
+
+    public void save(Appointment appointment) {
+        appointmentRepository.save(appointment);
+    }
+}
+package com.specialistapp.service;
+
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.security.core.userdetails.User.UserBuilder;
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
+        System.out.println("Trying to login with: " + usernameOrEmail); // лог в консоль
+
+        User user = userRepository.findByEmail(usernameOrEmail)
+                .orElse(userRepository.findByUsername(usernameOrEmail)
+                        .orElseThrow(() -> new UsernameNotFoundException("User not found")));
+
+        System.out.println("Found user: " + user.getEmail() + " with role: " + user.getRole());
+
+        UserBuilder builder = org.springframework.security.core.userdetails.User.withUsername(user.getEmail());
+        builder.password(user.getPassword());
+        builder.roles(user.getRole().replace("ROLE_", ""));
+
+        return builder.build();
+    }
+}
+package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Organization;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.OrganizationRepository;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+public class ModerationService {
+    @Autowired
+    private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    public List<Organization> getPendingOrganizations() {
+        return organizationRepository.findByApprovedFalse();
+    }
+
+    public void approveOrganization(Long id) {
+        Organization organization = organizationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Organization not found"));
+        organization.setApproved(true);
+        organizationRepository.save(organization);
+    }
+
+    public void rejectOrganization(Long id) {
+        organizationRepository.deleteById(id);
+    }
+
+    public List<User> getAllUsers() {
+        return userRepository.findAll();
+    }
+
+    @Transactional
+    public void deleteUser(Long id) {
+        userRepository.deleteById(id);
+    }
+}package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Organization;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.repository.OrganizationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class OrganizationService {
+
+    @Autowired
+    private OrganizationRepository organizationRepository;
+
+    public Organization saveOrganization(Organization organization) {
+        return organizationRepository.save(organization);
+    }
+
+    public List<Organization> getOrganizationsBySpecialist(Specialist specialist) {
+        return organizationRepository.findByCreatedBy(specialist);
+    }
+
+    public Organization getOrganizationById(Long id) {
+        return organizationRepository.findById(id).orElseThrow();
+    }
+}package com.specialistapp.service;
+
+import com.specialistapp.model.entity.ProfessionType;
+import com.specialistapp.model.repository.ProfessionTypeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class ProfessionTypeService {
+
+    @Autowired
+    private ProfessionTypeRepository professionTypeRepository;
+
+    public List<ProfessionType> findAll() {
+        return professionTypeRepository.findAll();
+    }
+}
+package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.SpecialistRepository;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class RegistrationService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SpecialistRepository specialistRepository;
+
+    public User registerUser(User user) {
+        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Email already in use");
+        }
+        if (userRepository.findByUsername(user.getUsername()).isPresent()) {
+            throw new IllegalArgumentException("Username already in use");
+        }
+
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole("ROLE_USER");
+        return userRepository.save(user);
+    }
+
+    public Specialist registerSpecialist(Specialist specialist) {
+        if (userRepository.findByEmail(specialist.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Email already in use");
+        }
+        if (userRepository.findByUsername(specialist.getUsername()).isPresent()) {
+            throw new IllegalArgumentException("Username already in use");
+        }
+
+        specialist.setPassword(passwordEncoder.encode(specialist.getPassword()));
+        specialist.setRole("ROLE_SPECIALIST");
+
+
+        return specialistRepository.save(specialist);
+    }
+}
+package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Review;
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.ReviewRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import java.util.List;
+
+@Service
+public class ReviewService {
+
+    @Autowired
+    private ReviewRepository reviewRepository;
+
+    public Review createReview(User user, Specialist specialist, int rating, String comment) {
+        Review review = new Review();
+        review.setUser(user);
+        review.setSpecialist(specialist);
+        review.setRating(rating);
+        review.setComment(comment);
+        return reviewRepository.save(review);
+    }
+
+    public double calculateAverageRating(Specialist specialist) {
+        List<Review> reviews = reviewRepository.findBySpecialist(specialist);
+        return reviews.stream()
+                .mapToInt(Review::getRating)
+                .average()
+                .orElse(0.0);
+    }
+
+    public List<Review> findBySpecialist(Specialist specialist) {
+        return reviewRepository.findBySpecialist(specialist);
+    }
+    public void save(Review review) {
+        reviewRepository.save(review);
+    }
+}package com.specialistapp.service;
+
+import com.specialistapp.model.entity.Specialist;
+import com.specialistapp.model.repository.SpecialistRepository;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class SpecialistService {
+
+    @Autowired
+    private SpecialistRepository specialistRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    public Specialist findByEmail(String email) {
+        return (Specialist) userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Specialist not found"));
+    }
+
+    public List<Specialist> findAll() {
+        return specialistRepository.findAll();
+    }
+
+    public List<Specialist> findByProfessionType(Long professionTypeId) {
+        return specialistRepository.findByProfessionTypeId(professionTypeId);
+    }
+
+    public Specialist findById(Long id) {
+        return specialistRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Specialist not found"));
+    }
+    public List<Specialist> searchSpecialists(String name, Long professionId) {
+        return specialistRepository.searchSpecialists(
+                name == null || name.isEmpty() ? null : name,
+                professionId == null || professionId == 0 ? null : professionId
+        );
+    }
+    public List<Specialist> findAllApprovedSpecialists() {
+        return specialistRepository.findByOrganization_ApprovedTrue();
+    }
+
+    public List<Specialist> findByProfessionTypeName(String professionName) {
+        return specialistRepository.findByProfessionType_NameAndOrganization_ApprovedTrue(professionName);
+    }
+
+
+}package com.specialistapp.service;
+
+import com.specialistapp.model.entity.User;
+
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    public User findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+}package com.specialistapp;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+
+@SpringBootApplication(scanBasePackages = "com.specialistapp")
+@EntityScan("com.specialistapp.model.entity")
+@EnableJpaRepositories("com.specialistapp.model.repository")
+public class SpecialistAppApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SpecialistAppApplication.class, args);
+    }
+
+}
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    margin-bottom: 20px;
+}
+
+.list-group-item.active {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.specialist-card {
+    transition: transform 0.3s;
+    cursor: pointer;
+}
+
+.specialist-card:hover {
+    transform: translateY(-5px);
+}
+
+.time-slot {
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 10px;
+    margin: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.time-slot:hover {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.time-slot.selected {
+    background-color: #0d6efd;
+    color: white;
+}document.addEventListener('DOMContentLoaded', function() {
+    // Time slot selection
+    document.querySelectorAll('.time-slot').forEach(slot => {
+        slot.addEventListener('click', function() {
+            document.querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+            this.classList.add('selected');
+            document.getElementById('selectedTime').value = this.dataset.time;
+        });
+    });
+
+    // Specialist search filter
+    const searchInput = document.getElementById('specialistSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const filter = this.value.toLowerCase();
+            document.querySelectorAll('.specialist-card').forEach(card => {
+                const name = card.querySelector('.specialist-name').textContent.toLowerCase();
+                const profession = card.querySelector('.specialist-profession').textContent.toLowerCase();
+                card.style.display = (name.includes(filter) || profession.includes(filter)) ? '' : 'none';
+            });
+        });
+    }
+});<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="text-center">Login</h3>
+        </div>
+        <div class="card-body">
+          <!-- Error Message -->
+          <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
+          <!-- Logout Message -->
+          <div th:if="${message}" class="alert alert-success" th:text="${message}"></div>
+
+          <form th:action="@{/auth/login}" method="post">
+            <div class="mb-3">
+              <label for="username" class="form-label">Email</label> <!-- надпись можно Email -->
+              <input type="text" class="form-control" id="username" name="username" required>
+            </div>
+            <div class="mb-3">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+          </form>
+
+
+          <div class="mt-3 text-center">
+            <p>Don't have an account?
+              <a th:href="@{/auth/register/user}">Register as User</a> or
+              <a th:href="@{/auth/register/specialist}">Register as Specialist</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Register as Specialist</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Specialist Registration</h2>
+
+  <form th:action="@{/auth/register/specialist}" method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label for="username" class="form-label">Username</label>
+      <input type="text" name="username" class="form-control" required/>
+    </div>
+
+    <div class="mb-3">
+      <label for="email" class="form-label">Email</label>
+      <input type="email" name="email" class="form-control" required/>
+    </div>
+
+    <div class="mb-3">
+      <label for="phone" class="form-label">Phone</label>
+      <input type="text" name="phone" class="form-control"/>
+    </div>
+
+    <div class="mb-3">
+      <label for="password" class="form-label">Password</label>
+      <input type="password" name="password" class="form-control" required/>
+    </div>
+
+    <div class="mb-3">
+      <label for="bio" class="form-label">Bio</label>
+      <textarea name="bio" class="form-control"></textarea>
+    </div>
+
+    <div class="mb-3">
+      <label for="photo" class="form-label">Upload Photo</label>
+      <input type="file" name="photo" class="form-control" required/>
+    </div>
+
+    <div class="mb-3">
+      <label for="professionType" class="form-label">Select Profession</label>
+      <select name="professionType.id" class="form-control" required>
+        <option th:each="profession : ${professions}"
+                th:value="${profession.id}"
+                th:text="${profession.name}">
+        </option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100">Register</button>
+  </form>
+</div>
+</body>
+</html>
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>User Registration</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .registration-card {
+      border-radius: 15px;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+      margin-top: 50px;
+    }
+    .registration-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 15px 15px 0 0 !important;
+    }
+    .btn-gradient {
+      background: linear-gradient(to right, #667eea, #764ba2);
+      border: none;
+      color: white;
+    }
+    .form-control:focus {
+      border-color: #764ba2;
+      box-shadow: 0 0 0 0.25rem rgba(118, 75, 162, 0.25);
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card registration-card">
+        <div class="card-header registration-header text-center py-3">
+          <h3><i class="bi bi-person-plus"></i> User Registration</h3>
+        </div>
+        <div class="card-body p-4">
+          <form th:action="@{/auth/register/user}" method="post" th:object="${user}">
+            <div class="mb-3">
+              <label for="username" class="form-label">Username</label>
+              <input type="text" class="form-control" id="username" th:field="*{username}" required>
+              <small class="text-danger" th:if="${#fields.hasErrors('username')}" th:errors="*{username}"></small>
+            </div>
+            <div class="mb-3">
+              <label for="email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="email" th:field="*{email}" required>
+              <small class="text-danger" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small>
+            </div>
+            <div class="mb-3">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="password" th:field="*{password}" required>
+              <small class="text-danger" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></small>
+            </div>
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-gradient btn-lg">Register</button>
+            </div>
+          </form>
+          <div class="text-center mt-3">
+            <p>Already have an account? <a th:href="@{/auth/login}" class="text-gradient">Login here</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Specialist App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container">
+        <a class="navbar-brand" href="/">SpecialistApp</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/}">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" th:href="@{/search}">Find Specialist</a>
+                </li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item" sec:authorize="hasRole('USER')">
+                    <a class="nav-link" th:href="@{/user/profile}">Profile</a>
+                </li>
+                <li class="nav-item" sec:authorize="hasRole('SPECIALIST')">
+                    <a class="nav-link" th:href="@{/specialist/schedule}">My Schedule</a>
+                </li>
+                <li class="nav-item" sec:authorize="hasRole('MODERATOR')">
+                    <a class="nav-link" th:href="@{/moderator/organizations/pending}">Moderation</a>
+                </li>
+                <li class="nav-item" sec:authorize="isAuthenticated()">
+                    <a class="nav-link" th:href="@{/auth/logout}">Logout</a>
+                </li>
+                <li class="nav-item" sec:authorize="!isAuthenticated()">
+                    <a class="nav-link" th:href="@{/auth/login}">Login</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <!-- Messages fragment -->
+    <div th:replace="~{fragments/messages :: messages}"></div>
+
+    <!-- Main content -->
+    <div th:insert="${content}">Page Content</div>
+</div>
+
+<footer class="mt-5 py-3 bg-light">
+    <div class="container text-center">
+        <span class="text-muted">SpecialistApp © 2025</span>
+    </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script th:src="@{/js/main.js}"></script>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="messages">
+  <!-- Global errors (not form-bound) -->
+  <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+  <div th:if="${message}" class="alert alert-success" th:text="${message}"></div>
+
+  <!-- Form errors (will only show when inside a form with th:object) -->
+  <!-- <div th:if="${#fields != null and #fields.hasErrors('*')}" class="alert alert-danger">
+     <ul>
+       <li th:each="err : ${#fields.errors('*')}" th:text="${err}"></li>
+     </ul>
+   </div>-->
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="content">
+  <h2 class="mb-4">Find a Specialist</h2>
+
+  <form th:action="@{/}" method="get" class="mb-4">
+    <div class="input-group">
+      <input type="text" class="form-control" name="profession"
+             placeholder="Enter profession (e.g., Psychologist)"
+             th:value="${selectedProfession}">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </div>
+  </form>
+
+  <div class="row" th:if="${not #lists.isEmpty(specialists)}">
+    <div class="col-md-4 mb-4" th:each="specialist : ${specialists}">
+      <div class="card h-100 specialist-card">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top"
+             alt="Specialist Photo" style="height: 200px; object-fit: cover;"
+             onerror="this.src='/images/default-avatar.jpg'">
+        <div class="card-body">
+          <h5 class="card-title" th:text="${specialist.user.username}">Name</h5>
+          <p class="card-text"><b>Profession:</b> <span th:text="${specialist.professionType.name}"></span></p>
+          <p class="card-text" th:text="${specialist.bio}">Description</p>
+
+          <div class="d-grid gap-2">
+            <a th:href="@{/appointments/book(specialistId=${specialist.user.id})}"
+               class="btn btn-success">Book Appointment</a>
+            <a th:href="@{/reviews/{id}(id=${specialist.user.id})}"
+               class="btn btn-outline-primary">Reviews</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div th:if="${#lists.isEmpty(specialists)}" class="alert alert-info">
+    No specialists found matching your criteria.
+  </div>
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="fragments/layout.html">
+<head>
+  <title>Moderation</title>
+</head>
+<body>
+<div th:fragment="content">
+  <h2>Pending Organizations</h2>
+
+  <div class="list-group">
+    <div th:each="organization : ${organizations}" class="list-group-item">
+      <h5 th:text="${organization.name}">Organization Name</h5>
+      <p th:text="${organization.description}">Description</p>
+
+      <form th:action="@{/moderator/organizations/{id}/approve(id=${organization.id})}" method="post" style="display:inline;">
+        <button type="submit" class="btn btn-success btn-sm">Approve</button>
+      </form>
+
+      <form th:action="@{/moderator/organizations/{id}/reject(id=${organization.id})}" method="post" style="display:inline;">
+        <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+      </form>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Specialist Reviews</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+    <h2>Reviews for <span th:text="${specialist.username}"></span></h2>
+
+    <div class="mb-4">
+        <form th:action="@{/reviews/{id}/add(id=${specialist.id})}" method="post">
+            <div class="mb-3">
+                <label for="rating" class="form-label">Rating (1-5)</label>
+                <input type="number" name="rating" class="form-control" min="1" max="5" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="content" class="form-label">Your Review</label>
+                <textarea name="content" class="form-control" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Submit Review</button>
+        </form>
+    </div>
+
+    <div th:each="review : ${reviews}" class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Rating: <span th:text="${review.rating}"></span>/5</h5>
+            <p class="card-text" th:text="${review.content}"></p>
+            <small class="text-muted" th:text="${review.user.username}"></small>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Find a Specialist</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+    <h2>Find a Specialist</h2>
+
+    <form th:action="@{/search}" method="get" class="row g-3 mb-4">
+        <div class="col-md-5">
+            <input type="text" name="name" class="form-control" placeholder="Enter name" th:value="${name}">
+        </div>
+        <div class="col-md-4">
+            <select name="professionId" class="form-control">
+                <option value="">All professions</option>
+                <option th:each="profession : ${professions}"
+                        th:value="${profession.id}"
+                        th:text="${profession.name}"
+                        th:selected="${professionId} == ${profession.id}">
+                </option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary w-100">Search</button>
+        </div>
+    </form>
+
+    <div class="row">
+        <div class="col-md-4 mb-4" th:each="specialist : ${specialists}">
+            <div class="card h-100">
+                <img th:src="${specialist.photoUrl}" class="card-img-top" alt="Specialist Photo" style="height: 200px; object-fit: cover;">
+                <div class="card-body">
+                    <h5 class="card-title" th:text="${specialist.username}">Name</h5>
+                    <p class="card-text" th:text="${specialist.bio}">Bio</p>
+                    <a th:href="@{/appointments/book(specialistId=${specialist.id})}" class="btn btn-success w-100">Book Appointment</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+<head>
+  <title>Book Appointment</title>
+</head>
+<body>
+<section class="container">
+  <div class="row">
+    <div class="col-md-4">
+      <div class="card">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top" alt="Specialist Photo">
+        <div class="card-body">
+          <h5 class="card-title" th:text="${specialist.user.username}"></h5>
+          <h6 class="card-subtitle mb-2 text-muted"
+              th:text="${specialist.professionType.name}"></h6>
+          <p class="card-text" th:text="${specialist.bio}"></p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <h3>Available Time Slots</h3>
+      <form th:action="@{/user/book-appointment/{id}(id=${specialist.id})}" method="post">
+        <input type="hidden" id="selectedTime" name="appointmentTime">
+
+        <div class="mb-3">
+          <label for="notes" class="form-label">Additional Notes</label>
+          <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+        </div>
+
+        <div class="available-slots">
+          <div th:each="slot : ${availableSlots}"
+               class="time-slot d-inline-block"
+               th:attr="data-time=${#temporals.format(slot, 'yyyy-MM-dd HH:mm')}">
+            <span th:text="${#temporals.format(slot, 'MMM dd, hh:mm a')}"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-3">Book Appointment</button>
+      </form>
+    </div>
+  </div>
+</section>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+<head>
+  <title>User Dashboard</title>
+</head>
+<body>
+<section class="container">
+  <div class="row">
+    <div class="col-md-3">
+      <div class="card">
+        <div class="card-header">
+          <h5>Navigation</h5>
+        </div>
+        <div class="list-group list-group-flush">
+          <a th:href="@{/user/profile}" class="list-group-item list-group-item-action">My Profile</a>
+          <a th:href="@{/user/appointments}" class="list-group-item list-group-item-action">My Appointments</a>
+          <a th:href="@{/user/find-specialist}" class="list-group-item list-group-item-action">Find Specialist</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-9">
+      <h2>Welcome, <span th:text="${#authentication.principal.username}"></span></h2>
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Upcoming Appointments</h5>
+          <div th:if="${upcomingAppointments.empty}">
+            <p>No upcoming appointments</p>
+          </div>
+          <div th:unless="${upcomingAppointments.empty}">
+            <div class="list-group">
+              <a th:each="appointment : ${upcomingAppointments}"
+                 th:href="@{/user/appointments/{id}(id=${appointment.id})}"
+                 class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                  <h6 class="mb-1" th:text="${appointment.specialist.user.username}"></h6>
+                  <small th:text="${#temporals.format(appointment.appointmentTime, 'MMM dd, yyyy hh:mm a')}"></small>
+                </div>
+                <p class="mb-1" th:text="${appointment.specialist.professionType.name}"></p>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+<head>
+  <title>Find Specialist</title>
+</head>
+<body>
+<section class="container">
+  <h2 class="mb-4">Find a Specialist</h2>
+
+  <div class="mb-4">
+    <input type="text" id="specialistSearch" class="form-control" placeholder="Search by name or profession...">
+  </div>
+
+  <div class="row">
+    <div th:each="specialist : ${specialists}" class="col-md-4 mb-4">
+      <div class="card specialist-card">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top" alt="Specialist Photo">
+        <div class="card-body">
+          <h5 class="card-title specialist-name" th:text="${specialist.user.username}"></h5>
+          <h6 class="card-subtitle mb-2 text-muted specialist-profession"
+              th:text="${specialist.professionType.name}"></h6>
+          <p class="card-text" th:text="${specialist.bio}"></p>
+          <a th:href="@{/user/book-appointment/{id}(id=${specialist.id})}"
+             class="btn btn-primary">Book Appointment</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+</body>
+</html>spring.application.name=SpecialistApp
+BASE_URL=http://localhost:8083/
+spring.mvc.pathmatch.matching-strategy=ant-path-matcher
+# Thymeleaf
+spring.thymeleaf.cache=false 
+spring.thymeleaf.prefix=classpath:/templates/
+spring.thymeleaf.suffix=.html
+
+
+# application.properties
+spring.datasource.url=jdbc:postgresql://localhost:5433/specialist
+spring.datasource.username=postgres
+spring.datasource.password=1914
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA/Hibernate
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+spring.servlet.multipart.max-file-size=2MB
+spring.servlet.multipart.max-request-size=2MB
+
+# Security
+spring.security.user.name=admin
+spring.security.user.password=admin
+spring.security.user.roles=ADMIN
+logging.level.org.springframework.security=DEBUGserver:
+  port : 8083
+spring:
+  jpa:
+    database: postgresql
+    show-sql: true
+    generate-ddl: true
+    hibernate:
+      ddl-auto: create
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+      packages-to-scan: com.specialistapp.model.entity
+  datasource:
+    url: jdbc:postgresql://localhost:5433/specialist
+    username: postgres
+    password: 1914
+    driver-class-name: org.postgresql.Driver
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: default
+
+
+

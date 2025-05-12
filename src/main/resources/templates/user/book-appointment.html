@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+<head>
+  <title>Book Appointment</title>
+</head>
+<body>
+<section class="container">
+  <div class="row">
+    <div class="col-md-4">
+      <div class="card">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top" alt="Specialist Photo">
+        <div class="card-body">
+          <h5 class="card-title" th:text="${specialist.user.username}"></h5>
+          <h6 class="card-subtitle mb-2 text-muted"
+              th:text="${specialist.professionType.name}"></h6>
+          <p class="card-text" th:text="${specialist.bio}"></p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <h3>Available Time Slots</h3>
+      <form th:action="@{/user/book-appointment/{id}(id=${specialist.id})}" method="post">
+        <input type="hidden" id="selectedTime" name="appointmentTime">
+
+        <div class="mb-3">
+          <label for="notes" class="form-label">Additional Notes</label>
+          <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+        </div>
+
+        <div class="available-slots">
+          <div th:each="slot : ${availableSlots}"
+               class="time-slot d-inline-block"
+               th:attr="data-time=${#temporals.format(slot, 'yyyy-MM-dd HH:mm')}">
+            <span th:text="${#temporals.format(slot, 'MMM dd, hh:mm a')}"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-3">Book Appointment</button>
+      </form>
+    </div>
+  </div>
+</section>
+</body>
+</html>
