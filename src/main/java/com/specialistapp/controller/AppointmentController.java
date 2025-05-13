@@ -13,6 +13,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 
 @Controller
@@ -28,22 +29,28 @@ public class AppointmentController {
     @Autowired
     private UserService userService;
 
-    @GetMapping("/book")
-    public String showBookingForm(@RequestParam("specialistId") Long specialistId, Model model) {
+    @GetMapping("/book/{specialistId}")
+    public String showBookingForm(@PathVariable Long specialistId, Model model) {
         Specialist specialist = specialistService.findById(specialistId);
         model.addAttribute("specialist", specialist);
-        model.addAttribute("slots", appointmentService.findAvailableSlots(specialist));
+        model.addAttribute("appointment", new Appointment());
         return "appointments/book";
     }
 
     @PostMapping("/book")
-    public String bookAppointment(@RequestParam("specialistId") Long specialistId,
-                                  @RequestParam("slot") String slot,
-                                  @AuthenticationPrincipal UserDetails userDetails) {
-        User user = userService.findByEmail(userDetails.getUsername());
+    public String bookAppointment(@ModelAttribute Appointment appointment,
+                                  @RequestParam Long specialistId,
+                                  Principal principal,
+                                  Model model) {
+        User user = userService.findByEmail(principal.getName());
         Specialist specialist = specialistService.findById(specialistId);
-        LocalDateTime selectedSlot = LocalDateTime.parse(slot);
-        appointmentService.createAppointment(user, specialist, selectedSlot);
-        return "redirect:/user/appointments";
+
+        appointment.setUser(user);
+        appointment.setSpecialist(specialist);
+        appointment.setStatus("PENDING");
+
+        appointmentService.saveAppointment(appointment);
+
+        return "redirect:/user/appointments?booked";
     }
 }
