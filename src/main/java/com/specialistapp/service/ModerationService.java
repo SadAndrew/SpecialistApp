@@ -22,19 +22,8 @@ public class ModerationService {
         return organizationRepository.findByApprovedFalse();
     }
 
-    public void approveOrganization(Long id) {
-        Organization organization = organizationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Organization not found"));
-        organization.setApproved(true);
-        organizationRepository.save(organization);
-    }
-
-    public void rejectOrganization(Long id) {
-        organizationRepository.deleteById(id);
-    }
-
     public List<User> getAllUsers() {
-        return userRepository.findAll();
+        return userRepository.findAllRegularUsers();
     }
 
     @Transactional

@@ -27,6 +27,43 @@ public class DatabaseInitializer {
     }
 }package com.specialistapp.config;
 
+
+import com.specialistapp.model.entity.User;
+import com.specialistapp.model.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class ModeratorInitializer implements CommandLineRunner {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Autowired
+    public ModeratorInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public void run(String... args) {
+        String username = "moderator";
+        if (userRepository.findByUsername(username).isEmpty()) {
+            User moderator = new User();
+            moderator.setUsername(username);
+            moderator.setEmail("moderator@example.com");
+            moderator.setPassword("{bcrypt}" + passwordEncoder.encode("moderator"));
+            moderator.setRole("ROLE_MODERATOR");  // Добавьте эту строку
+            userRepository.save(moderator);
+            System.out.println("Модератор создан: логин = moderator, пароль = moderator");
+        } else {
+            System.out.println("Модератор уже существует");
+        }
+    }
+}package com.specialistapp.config;
+
 import com.specialistapp.service.CustomUserDetailsService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -80,7 +117,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-
     @Bean
     public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
         return (request, response, authentication) -> {
@@ -96,8 +132,21 @@ public class SecurityConfig {
         };
     }
 
-}
-package com.specialistapp.controller;
+}package com.specialistapp.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + System.getProperty("user.dir") + "/uploads/");
+    }
+}package com.specialistapp.controller;
 
 import com.specialistapp.model.entity.Appointment;
 import com.specialistapp.model.entity.Specialist;
@@ -112,6 +161,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 
 @Controller
@@ -127,26 +177,31 @@ public class AppointmentController {
     @Autowired
     private UserService userService;
 
-    @GetMapping("/book")
-    public String showBookingForm(@RequestParam("specialistId") Long specialistId, Model model) {
+    @GetMapping("/book/{specialistId}")
+    public String showBookingForm(@PathVariable Long specialistId, Model model) {
         Specialist specialist = specialistService.findById(specialistId);
         model.addAttribute("specialist", specialist);
-        model.addAttribute("slots", appointmentService.findAvailableSlots(specialist));
+        model.addAttribute("appointment", new Appointment());
         return "appointments/book";
     }
 
     @PostMapping("/book")
-    public String bookAppointment(@RequestParam("specialistId") Long specialistId,
-                                  @RequestParam("slot") String slot,
-                                  @AuthenticationPrincipal UserDetails userDetails) {
-        User user = userService.findByEmail(userDetails.getUsername());
+    public String bookAppointment(@ModelAttribute Appointment appointment,
+                                  @RequestParam Long specialistId,
+                                  Principal principal,
+                                  Model model) {
+        User user = userService.findByEmail(principal.getName());
         Specialist specialist = specialistService.findById(specialistId);
-        LocalDateTime selectedSlot = LocalDateTime.parse(slot);
-        appointmentService.createAppointment(user, specialist, selectedSlot);
-        return "redirect:/user/appointments";
+
+        appointment.setUser(user);
+        appointment.setSpecialist(specialist);
+        appointment.setStatus("PENDING");
+
+        appointmentService.saveAppointment(appointment);
+
+        return "redirect:/user/appointments?booked";
     }
-}
-package com.specialistapp.controller;
+}package com.specialistapp.controller;
 
 import com.specialistapp.model.entity.ProfessionType;
 import com.specialistapp.model.entity.Specialist;
@@ -178,15 +233,15 @@ public class AuthController {
                                 @RequestParam(value = "logout", required = false) String logout,
                                 Model model) {
         if (error != null) {
-            model.addAttribute("error", "Invalid username or password");
+            model.addAttribute("error", "Неверно имя пользоввателя или пароль");
         }
         if (logout != null) {
-            model.addAttribute("message", "You have been logged out successfully");
+            model.addAttribute("message", "Вы успешно вышли из аккаунта");
         }
         return "auth/login";
     }
 
-    @GetMapping("/auth/register/user")
+    @GetMapping("/register/user")
     public String showUserRegistrationForm(Model model) {
         model.addAttribute("user", new User());
         model.addAttribute("title", "User Registration");
@@ -206,6 +261,7 @@ public class AuthController {
         }
     }
 
+
     @GetMapping("/register/specialist")
     public String showSpecialistRegistrationForm(Model model) {
         List<ProfessionType> professionTypes = professionTypeService.findAll();
@@ -215,33 +271,51 @@ public class AuthController {
     }
 
     @PostMapping("/register/specialist")
-    public String registerSpecialist(@ModelAttribute Specialist specialist,
-                                     @RequestParam("photo") MultipartFile file,
-                                     Model model) {
+    public String registerSpecialist(
+            @ModelAttribute("specialist") Specialist specialist,
+            @RequestParam("photo") MultipartFile file,
+            @RequestParam("professionType.id") Long professionTypeId,
+            Model model) {
         try {
+            ProfessionType professionType = professionTypeService.findById(professionTypeId);
+            specialist.setProfessionType(professionType);
+
+            // Обработка файла
             if (!file.isEmpty()) {
-                String uploadDir = "uploads/";
+                // Создаем директорию в корне проекта, а не во временной папке Tomcat
+                String uploadDir = System.getProperty("user.dir") + "/uploads/";
                 File uploadFolder = new File(uploadDir);
+
+                // Создаем директорию, если она не существует
                 if (!uploadFolder.exists()) {
-                    uploadFolder.mkdirs();
+                    boolean created = uploadFolder.mkdirs();
+                    if (!created) {
+                        throw new IOException("Could not create upload directory");
+                    }
                 }
-                String filePath = uploadDir + file.getOriginalFilename();
+
+                // Генерируем уникальное имя файла
+                String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+                String filePath = uploadDir + fileName;
+
+                // Сохраняем файл
                 file.transferTo(new File(filePath));
-                specialist.setPhotoUrl("/" + filePath); // <-- теперь будет работать
+
+                // Сохраняем относительный путь для доступа через веб
+                specialist.setPhotoUrl("/uploads/" + fileName);
             }
 
-            registrationService.registerSpecialist(specialist); // сохраняется
+            // Сохранение специалиста
+            registrationService.registerSpecialist(specialist);
             return "redirect:/auth/login?registered";
         } catch (Exception e) {
-            model.addAttribute("error", e.getMessage());
-            model.addAttribute("specialist", specialist);
+            e.printStackTrace();
+            model.addAttribute("error", "Ошибка при регистрации: " + e.getMessage());
+            model.addAttribute("professions", professionTypeService.findAll());
             return "auth/register-specialist";
         }
     }
-
-
-}
-package com.specialistapp.controller;
+}package com.specialistapp.controller;
 
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.service.SpecialistService;
@@ -273,11 +347,11 @@ public class HomeController {
 
         return "fragments/layout";
     }
-}
-package com.specialistapp.controller;
+}package com.specialistapp.controller;
 
 import com.specialistapp.model.entity.Organization;
 import com.specialistapp.service.ModerationService;
+import com.specialistapp.service.OrganizationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
@@ -292,6 +366,9 @@ public class ModerationController {
     @Autowired
     private ModerationService moderationService;
 
+    @Autowired
+    private OrganizationService organizationService;
+
     @GetMapping("/organizations/pending")
     public String getPendingOrganizations(Model model) {
         model.addAttribute("organizations", moderationService.getPendingOrganizations());
@@ -300,14 +377,13 @@ public class ModerationController {
 
     @PostMapping("/organizations/{id}/approve")
     public String approveOrganization(@PathVariable Long id) {
-        moderationService.approveOrganization(id);
-        return "redirect:/moderator/organizations/pending";
+        organizationService.approveOrganization(id);
+        return "redirect:/moderator/organizations";
     }
-
     @PostMapping("/organizations/{id}/reject")
     public String rejectOrganization(@PathVariable Long id) {
-        moderationService.rejectOrganization(id);
-        return "redirect:/moderator/organizations/pending";
+        organizationService.rejectOrganization(id);
+        return "redirect:/moderator/organizations";
     }
 
     @GetMapping("/users")
@@ -377,8 +453,7 @@ public class ReviewController {
 
         return "redirect:/reviews/" + specialistId;
     }
-}
-package com.specialistapp.controller;
+}package com.specialistapp.controller;
 
 import com.specialistapp.model.entity.ProfessionType;
 import com.specialistapp.model.entity.Specialist;
@@ -423,6 +498,7 @@ import com.specialistapp.model.entity.Organization;
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.service.AppointmentService;
 import com.specialistapp.service.OrganizationService;
+import com.specialistapp.service.ReviewService;
 import com.specialistapp.service.SpecialistService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -431,6 +507,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 
 @Controller
 @RequestMapping("/specialist")
@@ -442,6 +519,9 @@ public class SpecialistController {
 
     @Autowired
     private SpecialistService specialistService;
+
+    @Autowired
+    private ReviewService reviewService;
 
     @Autowired
     private OrganizationService organizationService;
@@ -460,14 +540,16 @@ public class SpecialistController {
         return "specialist/organization-create";
     }
 
+
     @PostMapping("/organization/create")
-    public String createOrganization(@ModelAttribute Organization organization,
-                                     Principal principal) {
+    public String createOrganization(@ModelAttribute Organization organization, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
         organization.setCreatedBy(specialist);
+        organization.setApproved(false); // требует модерации
         organizationService.saveOrganization(organization);
-        return "redirect:/specialist/dashboard";
+        return "redirect:/specialist/schedule";
     }
+
     @GetMapping("/register/specialist")
     public String showSpecialistRegistrationForm(Model model) {
         model.addAttribute("specialist", new Specialist()); // 
@@ -478,6 +560,31 @@ public class SpecialistController {
         model.addAttribute("title", "Поиск специалистов");
         model.addAttribute("content", "specialists/find");
         return "fragments/layout";
+    }
+    @GetMapping("/list")
+    public String listSpecialists(Model model) {
+        List<Specialist> specialists = specialistService.findAllApproved();
+        model.addAttribute("specialists", specialists);
+        return "specialists/list";
+    }
+
+    @GetMapping("/{id}")
+    public String viewSpecialist(@PathVariable Long id, Model model) {
+        Specialist specialist = specialistService.findById(id);
+        model.addAttribute("specialist", specialist);
+        model.addAttribute("reviews", reviewService.findBySpecialist(specialist));
+        return "specialists/profile";
+    }
+    @PostMapping("/appointments/confirm")
+    public String confirmAppointment(@RequestParam Long appointmentId) {
+        appointmentService.confirmAppointment(appointmentId);
+        return "redirect:/specialist/schedule";
+    }
+
+    @PostMapping("/appointments/reject")
+    public String rejectAppointment(@RequestParam Long appointmentId) {
+        appointmentService.rejectAppointment(appointmentId);
+        return "redirect:/specialist/schedule";
     }
 
 }package com.specialistapp.controller;
@@ -532,7 +639,7 @@ public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    private String status; // например: PENDING, CONFIRMED, REJECTED
     private LocalDateTime appointmentDate;
 
     @ManyToOne
@@ -595,6 +702,9 @@ public class Appointment {
 
     public void setConfirmed(boolean confirmed) {
         this.confirmed = confirmed;
+    }
+
+    public void setStatus(String pending) {
     }
 }
 package com.specialistapp.model.entity;
@@ -711,8 +821,7 @@ public class ProfessionType {
     public void setName(String name) {
         this.name = name;
     }
-}
-package com.specialistapp.model.entity;
+}package com.specialistapp.model.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -783,7 +892,9 @@ import jakarta.persistence.*;
 @PrimaryKeyJoinColumn(name = "user_id")
 public class Specialist extends User {
 
+    @Column(length = 1000)
     private String bio;
+
     private String photoUrl; // ссылка на загруженное фото
     private String workSchedule;
 
@@ -796,9 +907,15 @@ public class Specialist extends User {
     @JoinColumn(name = "organization_id")
     private Organization organization;
 
-    public void setPhotoUrl(String s) {
-        this.photoUrl = s;
+
+    public String getPhotoUrl() {
+        return photoUrl;
     }
+
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
+
     public ProfessionType getProfessionType() {
         return professionType;
     }
@@ -808,8 +925,38 @@ public class Specialist extends User {
     }
 
 
-}
-package com.specialistapp.model.entity;
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
+    }
+
+    public String getWorkSchedule() {
+        return workSchedule;
+    }
+
+    public void setWorkSchedule(String workSchedule) {
+        this.workSchedule = workSchedule;
+    }
+
+    public Organization getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(Organization organization) {
+        this.organization = organization;
+    }
+
+    @Override
+    public void setRole(String role) {
+        if (role == null || role.isEmpty()) {
+            role = "ROLE_SPECIALIST";
+        }
+        super.setRole(role);
+    }
+}package com.specialistapp.model.entity;
 
 import jakarta.persistence.*;
 import javax.validation.constraints.Email;
@@ -887,8 +1034,7 @@ public class User {
     public void setTelegramId(String telegramId) {
         this.telegramId = telegramId;
     }
-}
-package com.specialistapp.model.repository;
+}package com.specialistapp.model.repository;
 
 import com.specialistapp.model.entity.Appointment;
 import com.specialistapp.model.entity.Specialist;
@@ -947,8 +1093,7 @@ import com.specialistapp.model.entity.ProfessionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProfessionTypeRepository extends JpaRepository<ProfessionType, Long> {
-}
-package com.specialistapp.model.repository;
+}package com.specialistapp.model.repository;
 
 import com.specialistapp.model.entity.Review;
 import com.specialistapp.model.entity.Specialist;
@@ -1095,11 +1240,22 @@ public class AppointmentService {
         return appointmentRepository.findUpcomingByUser(userId, now);
     }
 
-    public void save(Appointment appointment) {
+    public void saveAppointment(Appointment appointment) {
         appointmentRepository.save(appointment);
     }
-}
-package com.specialistapp.service;
+
+    public void confirmAppointment(Long id) {
+        Appointment app = appointmentRepository.findById(id).orElseThrow();
+        app.setConfirmed(true);
+        appointmentRepository.save(app);
+    }
+
+    public void rejectAppointment(Long id) {
+        appointmentRepository.deleteById(id);
+    }
+
+
+}package com.specialistapp.service;
 
 import com.specialistapp.model.entity.User;
 import com.specialistapp.model.repository.UserRepository;
@@ -1118,22 +1274,25 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        System.out.println("Trying to login with: " + usernameOrEmail); // лог в консоль
+        System.out.println("Попытка входа с: " + usernameOrEmail);
 
         User user = userRepository.findByEmail(usernameOrEmail)
                 .orElse(userRepository.findByUsername(usernameOrEmail)
-                        .orElseThrow(() -> new UsernameNotFoundException("User not found")));
+                        .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден")));
 
-        System.out.println("Found user: " + user.getEmail() + " with role: " + user.getRole());
+        System.out.println("Найден пользователь: " + user.getEmail() + " с ролью: " + user.getRole());
 
-        UserBuilder builder = org.springframework.security.core.userdetails.User.withUsername(user.getEmail());
-        builder.password(user.getPassword());
-        builder.roles(user.getRole().replace("ROLE_", ""));
+        if (user.getRole() == null) {
+            throw new UsernameNotFoundException("Роль пользователя не определена");
+        }
 
-        return builder.build();
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getEmail())
+                .password(user.getPassword())
+                .roles(user.getRole().replace("ROLE_", ""))
+                .build();
     }
-}
-package com.specialistapp.service;
+}package com.specialistapp.service;
 
 import com.specialistapp.model.entity.Organization;
 import com.specialistapp.model.entity.User;
@@ -1203,6 +1362,19 @@ public class OrganizationService {
     public Organization getOrganizationById(Long id) {
         return organizationRepository.findById(id).orElseThrow();
     }
+    public List<Organization> findPending() {
+        return organizationRepository.findByApprovedFalse();
+    }
+
+    public void approveOrganization(Long id) {
+        Organization org = organizationRepository.findById(id).orElseThrow();
+        org.setApproved(true);
+        organizationRepository.save(org);
+    }
+
+    public void rejectOrganization(Long id) {
+        organizationRepository.deleteById(id);
+    }
 }package com.specialistapp.service;
 
 import com.specialistapp.model.entity.ProfessionType;
@@ -1211,6 +1383,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class ProfessionTypeService {
@@ -1221,13 +1394,18 @@ public class ProfessionTypeService {
     public List<ProfessionType> findAll() {
         return professionTypeRepository.findAll();
     }
-}
-package com.specialistapp.service;
+
+    public ProfessionType findById(Long id) {
+        return professionTypeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Профессия не найдена"));
+    }
+}package com.specialistapp.service;
 
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.model.entity.User;
 import com.specialistapp.model.repository.SpecialistRepository;
 import com.specialistapp.model.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -1257,22 +1435,28 @@ public class RegistrationService {
         return userRepository.save(user);
     }
 
+    @Transactional
     public Specialist registerSpecialist(Specialist specialist) {
+        // Проверка уникальности
         if (userRepository.findByEmail(specialist.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("Email already in use");
+            throw new IllegalArgumentException("Email уже используется");
         }
         if (userRepository.findByUsername(specialist.getUsername()).isPresent()) {
-            throw new IllegalArgumentException("Username already in use");
+            throw new IllegalArgumentException("Имя пользователя уже занято");
         }
 
-        specialist.setPassword(passwordEncoder.encode(specialist.getPassword()));
+        // Установка роли и шифрование пароля
         specialist.setRole("ROLE_SPECIALIST");
+        specialist.setPassword(passwordEncoder.encode(specialist.getPassword()));
 
+        // Сохранение
+        Specialist savedSpecialist = specialistRepository.save(specialist);
+        System.out.println("Зарегистрирован специалист: " + savedSpecialist);
+        System.out.println("Роль: " + savedSpecialist.getRole());
 
-        return specialistRepository.save(specialist);
+        return savedSpecialist;
     }
-}
-package com.specialistapp.service;
+}package com.specialistapp.service;
 
 import com.specialistapp.model.entity.Review;
 import com.specialistapp.model.entity.Specialist;
@@ -1362,6 +1546,11 @@ public class SpecialistService {
     }
 
 
+
+    public List<Specialist> findAllApproved() {
+        return specialistRepository.findAll(); // или фильтровать, если нужна проверка
+    }
+
 }package com.specialistapp.service;
 
 import com.specialistapp.model.entity.User;
@@ -1397,8 +1586,7 @@ public class SpecialistAppApplication {
         SpringApplication.run(SpecialistAppApplication.class, args);
     }
 
-}
-body {
+}body {
     background-color: #f8f9fa;
 }
 
@@ -1474,6 +1662,29 @@ body {
 });<!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
+  <title>Запись к специалисту</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Запись к <span th:text="${specialist.username}"></span></h2>
+
+  <form th:action="@{/appointments/book}" method="post" th:object="${appointment}">
+    <input type="hidden" name="specialistId" th:value="${specialist.id}" />
+
+    <div class="mb-3">
+      <label for="appointmentDate" class="form-label">Дата и время</label>
+      <input type="datetime-local" th:field="*{appointmentDate}" class="form-control" required/>
+    </div>
+
+    <button type="submit" class="btn btn-success">Записаться</button>
+  </form>
+</div>
+</body>
+</html>
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
   <meta charset="UTF-8">
   <title>Login</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -1484,7 +1695,7 @@ body {
     <div class="col-md-6">
       <div class="card">
         <div class="card-header">
-          <h3 class="text-center">Login</h3>
+          <h3 class="text-center">Вход</h3>
         </div>
         <div class="card-body">
           <!-- Error Message -->
@@ -1495,21 +1706,21 @@ body {
 
           <form th:action="@{/auth/login}" method="post">
             <div class="mb-3">
-              <label for="username" class="form-label">Email</label> <!-- надпись можно Email -->
+              <label for="username" class="form-label">Email</label>
               <input type="text" class="form-control" id="username" name="username" required>
             </div>
             <div class="mb-3">
-              <label for="password" class="form-label">Password</label>
+              <label for="password" class="form-label">Пароль</label>
               <input type="password" class="form-control" id="password" name="password" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">Login</button>
+            <button type="submit" class="btn btn-primary w-100">Авторизоваться</button>
           </form>
 
 
           <div class="mt-3 text-center">
-            <p>Don't have an account?
-              <a th:href="@{/auth/register/user}">Register as User</a> or
-              <a th:href="@{/auth/register/specialist}">Register as Specialist</a>
+            <p>Нету аккаунта?
+              <a th:href="@{/auth/register/user}">Зарегестриоваться как клиент</a> or
+              <a th:href="@{/auth/register/specialist}">Зарегестриоваться как клиент</a>
             </p>
           </div>
         </div>
@@ -1528,53 +1739,60 @@ body {
 <div class="container mt-5">
   <h2>Specialist Registration</h2>
 
+  <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
   <form th:action="@{/auth/register/specialist}" method="post" enctype="multipart/form-data">
     <div class="mb-3">
-      <label for="username" class="form-label">Username</label>
-      <input type="text" name="username" class="form-control" required/>
+      <label class="form-label">Username</label>
+      <input type="text" name="username" class="form-control" required th:value="${specialist?.username}"/>
     </div>
 
     <div class="mb-3">
-      <label for="email" class="form-label">Email</label>
-      <input type="email" name="email" class="form-control" required/>
+      <label class="form-label">Email</label>
+      <input type="email" name="email" class="form-control" required th:value="${specialist?.email}"/>
     </div>
 
     <div class="mb-3">
-      <label for="phone" class="form-label">Phone</label>
-      <input type="text" name="phone" class="form-control"/>
+      <label class="form-label">Phone</label>
+      <input type="text" name="phone" class="form-control" th:value="${specialist?.phone}"/>
     </div>
 
     <div class="mb-3">
-      <label for="password" class="form-label">Password</label>
+      <label class="form-label">Password</label>
       <input type="password" name="password" class="form-control" required/>
     </div>
 
     <div class="mb-3">
-      <label for="bio" class="form-label">Bio</label>
-      <textarea name="bio" class="form-control"></textarea>
+      <label class="form-label">Bio</label>
+      <textarea name="bio" class="form-control" th:text="${specialist?.bio}"></textarea>
     </div>
 
     <div class="mb-3">
-      <label for="photo" class="form-label">Upload Photo</label>
+      <label class="form-label">Upload Photo</label>
       <input type="file" name="photo" class="form-control" required/>
     </div>
 
     <div class="mb-3">
-      <label for="professionType" class="form-label">Select Profession</label>
+      <label class="form-label">Select Profession</label>
       <select name="professionType.id" class="form-control" required>
+        <option value="">Select profession</option>
         <option th:each="profession : ${professions}"
                 th:value="${profession.id}"
-                th:text="${profession.name}">
+                th:text="${profession.name}"
+                th:selected="${specialist?.professionType?.id == profession.id}">
         </option>
       </select>
+    </div>
+
+    <div class="mt-3 text-center">
+      <p>Already have an account? <a th:href="@{/auth/login}">Login here</a></p>
     </div>
 
     <button type="submit" class="btn btn-primary w-100">Register</button>
   </form>
 </div>
 </body>
-</html>
-<!DOCTYPE html>
+</html><!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <title>User Registration</title>
@@ -1763,32 +1981,85 @@ body {
 </div>
 </body>
 </html><!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="fragments/layout.html">
+<html xmlns:th="http://www.thymeleaf.org">
 <head>
-  <title>Moderation</title>
+  <title>Модерация организаций</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
 </head>
 <body>
-<div th:fragment="content">
-  <h2>Pending Organizations</h2>
+<div class="container mt-5">
+  <h2>Ожидающие подтверждения организации</h2>
 
-  <div class="list-group">
-    <div th:each="organization : ${organizations}" class="list-group-item">
-      <h5 th:text="${organization.name}">Organization Name</h5>
-      <p th:text="${organization.description}">Description</p>
-
-      <form th:action="@{/moderator/organizations/{id}/approve(id=${organization.id})}" method="post" style="display:inline;">
-        <button type="submit" class="btn btn-success btn-sm">Approve</button>
-      </form>
-
-      <form th:action="@{/moderator/organizations/{id}/reject(id=${organization.id})}" method="post" style="display:inline;">
-        <button type="submit" class="btn btn-danger btn-sm">Reject</button>
-      </form>
-    </div>
+  <div th:if="${organizations.isEmpty()}">
+    <p>Нет заявок на модерацию.</p>
   </div>
+
+  <table class="table" th:if="${!organizations.isEmpty()}">
+    <thead>
+    <tr>
+      <th>Название</th>
+      <th>Создатель</th>
+      <th>Действия</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="org : ${organizations}">
+      <td th:text="${org.name}">Название</td>
+      <td th:text="${org.createdBy.username}">Создатель</td>
+      <td>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/approve'}" method="post" style="display:inline">
+          <button class="btn btn-success btn-sm" type="submit">Одобрить</button>
+        </form>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/reject'}" method="post" style="display:inline">
+          <button class="btn btn-danger btn-sm" type="submit">Отклонить</button>
+        </form>
+      </td>
+    </tr>
+    </tbody>
+  </table>
 </div>
 </body>
 </html>
 <!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Модерация организаций</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Ожидающие подтверждения организации</h2>
+
+  <div th:if="${organizations.isEmpty()}">
+    <p>Нет заявок на модерацию.</p>
+  </div>
+
+  <table class="table" th:if="${!organizations.isEmpty()}">
+    <thead>
+    <tr>
+      <th>Название</th>
+      <th>Создатель</th>
+      <th>Действия</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="org : ${organizations}">
+      <td th:text="${org.name}">Название</td>
+      <td th:text="${org.createdBy.username}">Создатель</td>
+      <td>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/approve'}" method="post" style="display:inline">
+          <button class="btn btn-success btn-sm" type="submit">Одобрить</button>
+        </form>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/reject'}" method="post" style="display:inline">
+          <button class="btn btn-danger btn-sm" type="submit">Отклонить</button>
+        </form>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html><!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>Specialist Reviews</title>
@@ -1823,8 +2094,7 @@ body {
     </div>
 </div>
 </body>
-</html>
-<!DOCTYPE html>
+</html><!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>Find a Specialist</title>
@@ -1868,8 +2138,136 @@ body {
 
 </div>
 </body>
-</html>
-<!DOCTYPE html>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Специалисты</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Список специалистов</h2>
+  <div class="row">
+    <div class="col-12" th:if="${specialists.isEmpty()}">
+      <p>Нет зарегистрированных специалистов.</p>
+    </div>
+    <div class="col-md-4 mb-3" th:each="spec : ${specialists}">
+      <div class="card h-100">
+        <img th:src="${spec.photoUrl}" class="card-img-top" alt="Фото" style="height: 200px; object-fit: cover;">
+        <div class="card-body">
+          <h5 class="card-title" th:text="${spec.username}"></h5>
+          <p class="card-text" th:text="${spec.professionType.name}"></p>
+          <a th:href="@{'/specialist/' + ${spec.id}}" class="btn btn-primary w-100">Посмотреть профиль</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Создание организации</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Создание организации</h2>
+  <form th:action="@{/specialist/organization/create}" th:object="${organization}" method="post">
+    <div class="mb-3">
+      <label class="form-label">Название</label>
+      <input type="text" th:field="*{name}" class="form-control" required/>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Описание</label>
+      <textarea th:field="*{description}" class="form-control"></textarea>
+    </div>
+    <button type="submit" class="btn btn-success">Создать</button>
+  </form>
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title th:text="${specialist.username} + ' – профиль'">Профиль специалиста</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <div class="row">
+    <div class="col-md-4">
+      <img th:src="${specialist.photoUrl}" class="img-fluid rounded" alt="Фото специалиста">
+    </div>
+    <div class="col-md-8">
+      <h2 th:text="${specialist.username}"></h2>
+      <p><strong>Специальность:</strong> <span th:text="${specialist.professionType.name}"></span></p>
+      <p th:text="${specialist.bio}">Биография специалиста</p>
+      <a th:href="@{'/appointments/book/' + ${specialist.id}}" class="btn btn-success">Записаться</a>
+    </div>
+  </div>
+
+  <hr/>
+
+  <h4>Отзывы</h4>
+  <div th:each="review : ${reviews}" class="border rounded p-3 my-2">
+    <strong th:text="${review.user.username}">Автор</strong>
+    <p th:text="'Оценка: ' + ${review.rating} + '/5'"></p>
+    <p th:text="${review.comment}">Комментарий</p>
+  </div>
+</div>
+</body>
+</html><!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Панель специалиста</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Панель специалиста</h2>
+
+  <div class="my-3">
+    <a href="/specialist/organization/create" class="btn btn-primary">Создать организацию</a>
+  </div>
+
+  <h4 class="mt-4">Ваши записи</h4>
+
+  <div th:if="${appointments.isEmpty()}">
+    <p>У вас нет назначенных записей.</p>
+  </div>
+
+  <table class="table" th:if="${!appointments.isEmpty()}">
+    <thead>
+    <tr>
+      <th>Клиент</th>
+      <th>Дата</th>
+      <th>Описание</th>
+      <th>Статус</th>
+      <th>Действия</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="app : ${appointments}">
+      <td th:text="${app.user.username}">Клиент</td>
+      <td th:text="${#temporals.format(app.appointmentDate, 'dd.MM.yyyy HH:mm')}">Дата</td>
+      <td th:text="${app.description}">Описание</td>
+      <td th:text="${app.confirmed ? 'Подтверждено' : 'Ожидает'}">Статус</td>
+      <td>
+        <form th:action="@{/specialist/appointments/confirm}" method="post" style="display:inline">
+          <input type="hidden" name="appointmentId" th:value="${app.id}"/>
+          <button type="submit" class="btn btn-success btn-sm">Подтвердить</button>
+        </form>
+        <form th:action="@{/specialist/appointments/reject}" method="post" style="display:inline">
+          <input type="hidden" name="appointmentId" th:value="${app.id}"/>
+          <button type="submit" class="btn btn-danger btn-sm">Отклонить</button>
+        </form>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html><!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
 <head>
   <title>Book Appointment</title>
@@ -2019,14 +2417,24 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 
-spring.servlet.multipart.max-file-size=2MB
-spring.servlet.multipart.max-request-size=2MB
+spring.servlet.multipart.max-file-size=5MB
+spring.servlet.multipart.max-request-size=5MB
 
 # Security
 spring.security.user.name=admin
 spring.security.user.password=admin
 spring.security.user.roles=ADMIN
-logging.level.org.springframework.security=DEBUGserver:
+logging.level.org.springframework.security=DEBUG
+
+logging.level.com.specialistapp=DEBUG
+logging.level.org.springframework.web=DEBUG
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+
+
+# ????????? ?????? ? ??????????? ??????
+spring.web.resources.static-locations=classpath:/static/,file:${user.dir}/uploads/
+server:
   port : 8083
 spring:
   jpa:
@@ -2051,6 +2459,32 @@ spring:
     jpa:
       repositories:
         bootstrap-mode: default
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
