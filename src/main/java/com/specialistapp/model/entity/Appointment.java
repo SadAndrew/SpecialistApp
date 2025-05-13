@@ -9,7 +9,7 @@ public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    private String status; // например: PENDING, CONFIRMED, REJECTED
     private LocalDateTime appointmentDate;
 
     @ManyToOne
@@ -72,5 +72,8 @@ public class Appointment {
 
     public void setConfirmed(boolean confirmed) {
         this.confirmed = confirmed;
+    }
+
+    public void setStatus(String pending) {
     }
 }

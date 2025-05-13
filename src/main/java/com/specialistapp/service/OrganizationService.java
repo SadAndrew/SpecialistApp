@@ -25,4 +25,17 @@ public class OrganizationService {
     public Organization getOrganizationById(Long id) {
         return organizationRepository.findById(id).orElseThrow();
     }
+    public List<Organization> findPending() {
+        return organizationRepository.findByApprovedFalse();
+    }
+
+    public void approveOrganization(Long id) {
+        Organization org = organizationRepository.findById(id).orElseThrow();
+        org.setApproved(true);
+        organizationRepository.save(org);
+    }
+
+    public void rejectOrganization(Long id) {
+        organizationRepository.deleteById(id);
+    }
 }

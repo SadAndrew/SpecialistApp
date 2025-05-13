@@ -49,4 +49,9 @@ public class SpecialistService {
     }
 
 
+
+    public List<Specialist> findAllApproved() {
+        return specialistRepository.findAll(); // или фильтровать, если нужна проверка
+    }
+
 }

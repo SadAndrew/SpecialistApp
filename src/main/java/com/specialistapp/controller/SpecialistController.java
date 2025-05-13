@@ -4,6 +4,7 @@ import com.specialistapp.model.entity.Organization;
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.service.AppointmentService;
 import com.specialistapp.service.OrganizationService;
+import com.specialistapp.service.ReviewService;
 import com.specialistapp.service.SpecialistService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,6 +13,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.List;
 
 @Controller
 @RequestMapping("/specialist")
@@ -23,6 +25,9 @@ public class SpecialistController {
 
     @Autowired
     private SpecialistService specialistService;
+
+    @Autowired
+    private ReviewService reviewService;
 
     @Autowired
     private OrganizationService organizationService;
@@ -41,14 +46,16 @@ public class SpecialistController {
         return "specialist/organization-create";
     }
 
+
     @PostMapping("/organization/create")
-    public String createOrganization(@ModelAttribute Organization organization,
-                                     Principal principal) {
+    public String createOrganization(@ModelAttribute Organization organization, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
         organization.setCreatedBy(specialist);
+        organization.setApproved(false); // требует модерации
         organizationService.saveOrganization(organization);
-        return "redirect:/specialist/dashboard";
+        return "redirect:/specialist/schedule";
     }
+
     @GetMapping("/register/specialist")
     public String showSpecialistRegistrationForm(Model model) {
         model.addAttribute("specialist", new Specialist()); // 
@@ -59,6 +66,31 @@ public class SpecialistController {
         model.addAttribute("title", "Поиск специалистов");
         model.addAttribute("content", "specialists/find");
         return "fragments/layout";
+    }
+    @GetMapping("/list")
+    public String listSpecialists(Model model) {
+        List<Specialist> specialists = specialistService.findAllApproved();
+        model.addAttribute("specialists", specialists);
+        return "specialists/list";
+    }
+
+    @GetMapping("/{id}")
+    public String viewSpecialist(@PathVariable Long id, Model model) {
+        Specialist specialist = specialistService.findById(id);
+        model.addAttribute("specialist", specialist);
+        model.addAttribute("reviews", reviewService.findBySpecialist(specialist));
+        return "specialists/profile";
+    }
+    @PostMapping("/appointments/confirm")
+    public String confirmAppointment(@RequestParam Long appointmentId) {
+        appointmentService.confirmAppointment(appointmentId);
+        return "redirect:/specialist/schedule";
+    }
+
+    @PostMapping("/appointments/reject")
+    public String rejectAppointment(@RequestParam Long appointmentId) {
+        appointmentService.rejectAppointment(appointmentId);
+        return "redirect:/specialist/schedule";
     }
 
 }

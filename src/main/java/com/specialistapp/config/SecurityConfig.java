@@ -53,7 +53,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-
     @Bean
     public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
         return (request, response, authentication) -> {

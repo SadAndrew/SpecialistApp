@@ -17,18 +17,22 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        System.out.println("Trying to login with: " + usernameOrEmail); // лог в консоль
+        System.out.println("Попытка входа с: " + usernameOrEmail);
 
         User user = userRepository.findByEmail(usernameOrEmail)
                 .orElse(userRepository.findByUsername(usernameOrEmail)
-                        .orElseThrow(() -> new UsernameNotFoundException("User not found")));
+                        .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден")));
 
-        System.out.println("Found user: " + user.getEmail() + " with role: " + user.getRole());
+        System.out.println("Найден пользователь: " + user.getEmail() + " с ролью: " + user.getRole());
 
-        UserBuilder builder = org.springframework.security.core.userdetails.User.withUsername(user.getEmail());
-        builder.password(user.getPassword());
-        builder.roles(user.getRole().replace("ROLE_", ""));
+        if (user.getRole() == null) {
+            throw new UsernameNotFoundException("Роль пользователя не определена");
+        }
 
-        return builder.build();
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getEmail())
+                .password(user.getPassword())
+                .roles(user.getRole().replace("ROLE_", ""))
+                .build();
     }
 }

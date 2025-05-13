@@ -97,7 +97,19 @@ public class AppointmentService {
         return appointmentRepository.findUpcomingByUser(userId, now);
     }
 
-    public void save(Appointment appointment) {
+    public void saveAppointment(Appointment appointment) {
         appointmentRepository.save(appointment);
     }
+
+    public void confirmAppointment(Long id) {
+        Appointment app = appointmentRepository.findById(id).orElseThrow();
+        app.setConfirmed(true);
+        appointmentRepository.save(app);
+    }
+
+    public void rejectAppointment(Long id) {
+        appointmentRepository.deleteById(id);
+    }
+
+
 }

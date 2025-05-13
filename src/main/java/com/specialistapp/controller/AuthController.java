@@ -30,10 +30,10 @@ public class AuthController {
                                 @RequestParam(value = "logout", required = false) String logout,
                                 Model model) {
         if (error != null) {
-            model.addAttribute("error", "Invalid username or password");
+            model.addAttribute("error", "Неверно имя пользоввателя или пароль");
         }
         if (logout != null) {
-            model.addAttribute("message", "You have been logged out successfully");
+            model.addAttribute("message", "Вы успешно вышли из аккаунта");
         }
         return "auth/login";
     }
@@ -58,6 +58,7 @@ public class AuthController {
         }
     }
 
+
     @GetMapping("/register/specialist")
     public String showSpecialistRegistrationForm(Model model) {
         List<ProfessionType> professionTypes = professionTypeService.findAll();
@@ -70,7 +71,7 @@ public class AuthController {
     public String registerSpecialist(
             @ModelAttribute("specialist") Specialist specialist,
             @RequestParam("photo") MultipartFile file,
-            @RequestParam("professionType.id") Long professionTypeId, // Имя параметра совпадает с формой
+            @RequestParam("professionType.id") Long professionTypeId,
             Model model) {
         try {
             ProfessionType professionType = professionTypeService.findById(professionTypeId);
@@ -78,23 +79,40 @@ public class AuthController {
 
             // Обработка файла
             if (!file.isEmpty()) {
-                String uploadDir = "uploads/";
+                // Создаем директорию в корне проекта, а не во временной папке Tomcat
+                String uploadDir = System.getProperty("user.dir") + "/uploads/";
                 File uploadFolder = new File(uploadDir);
-                if (!uploadFolder.exists()) uploadFolder.mkdirs();
-                String filePath = uploadDir + file.getOriginalFilename();
+
+                // Создаем директорию, если она не существует
+                if (!uploadFolder.exists()) {
+                    boolean created = uploadFolder.mkdirs();
+                    if (!created) {
+                        throw new IOException("Could not create upload directory");
+                    }
+                }
+
+                // Генерируем уникальное имя файла
+                String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+                String filePath = uploadDir + fileName;
+
+                // Сохраняем файл
                 file.transferTo(new File(filePath));
-                specialist.setPhotoUrl("/" + filePath);
+
+                // Сохраняем относительный путь для доступа через веб
+                specialist.setPhotoUrl("/uploads/" + fileName);
             }
 
-            // Сохранение
+            // Сохранение специалиста
             registrationService.registerSpecialist(specialist);
             return "redirect:/auth/login?registered";
         } catch (Exception e) {
-            model.addAttribute("error", e.getMessage());
+            e.printStackTrace();
+            model.addAttribute("error", "Ошибка при регистрации: " + e.getMessage());
             model.addAttribute("professions", professionTypeService.findAll());
             return "auth/register-specialist";
         }
     }
-
-
 }
+
+
+

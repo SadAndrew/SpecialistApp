@@ -8,49 +8,55 @@
 <div class="container mt-5">
   <h2>Specialist Registration</h2>
 
+  <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
   <form th:action="@{/auth/register/specialist}" method="post" enctype="multipart/form-data">
     <div class="mb-3">
-      <label for="username" class="form-label">Username</label>
-      <input type="text" name="username" class="form-control" required/>
+      <label class="form-label">Username</label>
+      <input type="text" name="username" class="form-control" required th:value="${specialist?.username}"/>
     </div>
 
     <div class="mb-3">
-      <label for="email" class="form-label">Email</label>
-      <input type="email" name="email" class="form-control" required/>
+      <label class="form-label">Email</label>
+      <input type="email" name="email" class="form-control" required th:value="${specialist?.email}"/>
     </div>
 
     <div class="mb-3">
-      <label for="phone" class="form-label">Phone</label>
-      <input type="text" name="phone" class="form-control"/>
+      <label class="form-label">Phone</label>
+      <input type="text" name="phone" class="form-control" th:value="${specialist?.phone}"/>
     </div>
 
     <div class="mb-3">
-      <label for="password" class="form-label">Password</label>
+      <label class="form-label">Password</label>
       <input type="password" name="password" class="form-control" required/>
     </div>
 
     <div class="mb-3">
-      <label for="bio" class="form-label">Bio</label>
-      <textarea name="bio" class="form-control"></textarea>
+      <label class="form-label">Bio</label>
+      <textarea name="bio" class="form-control" th:text="${specialist?.bio}"></textarea>
     </div>
 
     <div class="mb-3">
-      <label for="photo" class="form-label">Upload Photo</label>
+      <label class="form-label">Upload Photo</label>
       <input type="file" name="photo" class="form-control" required/>
     </div>
 
     <div class="mb-3">
-      <label for="professionType" class="form-label">Select Profession</label>
+      <label class="form-label">Select Profession</label>
       <select name="professionType.id" class="form-control" required>
+        <option value="">Select profession</option>
         <option th:each="profession : ${professions}"
                 th:value="${profession.id}"
-                th:text="${profession.name}">
+                th:text="${profession.name}"
+                th:selected="${specialist?.professionType?.id == profession.id}">
         </option>
       </select>
     </div>
+
     <div class="mt-3 text-center">
       <p>Already have an account? <a th:href="@{/auth/login}">Login here</a></p>
     </div>
+
     <button type="submit" class="btn btn-primary w-100">Register</button>
   </form>
 </div>
