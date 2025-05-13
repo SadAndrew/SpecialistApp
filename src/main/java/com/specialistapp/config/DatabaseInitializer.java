@@ -14,14 +14,16 @@ public class DatabaseInitializer {
     @Bean
     CommandLineRunner initDatabase(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
-            // Create initial moderator account if not exists
             if (userRepository.findByEmail("moderator@example.com").isEmpty()) {
                 User moderator = new User();
                 moderator.setUsername("moderator");
                 moderator.setEmail("moderator@example.com");
-                moderator.setPassword(passwordEncoder.encode("securepassword"));
+                moderator.setPassword(passwordEncoder.encode("moderator")); // Единый пароль
                 moderator.setRole("ROLE_MODERATOR");
                 userRepository.save(moderator);
+                System.out.println("Модератор создан: логин = moderator, пароль = moderator");
+            } else {
+                System.out.println("Модератор уже существует");
             }
         };
     }
