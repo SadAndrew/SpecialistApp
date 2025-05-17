@@ -23,8 +23,10 @@ public class User {
     @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
     private String email;
+    @Column(nullable = false)
+    private boolean blocked = false;
 
-    @Column(unique = true)
+       @Column(unique = true)
     private String phone;
 
     @NotBlank(message = "Password is required")
@@ -75,5 +77,12 @@ public class User {
     }
     public void setTelegramId(String telegramId) {
         this.telegramId = telegramId;
+    }
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public void setBlocked(boolean blocked) {
+        this.blocked = blocked;
     }
 }

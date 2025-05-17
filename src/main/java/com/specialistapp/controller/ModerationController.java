@@ -29,12 +29,13 @@ public class ModerationController {
     @PostMapping("/organizations/{id}/approve")
     public String approveOrganization(@PathVariable Long id) {
         organizationService.approveOrganization(id);
-        return "redirect:/moderator/organizations";
+        return "redirect:/moderator/organizations/pending";
     }
+
     @PostMapping("/organizations/{id}/reject")
     public String rejectOrganization(@PathVariable Long id) {
         organizationService.rejectOrganization(id);
-        return "redirect:/moderator/organizations";
+        return "redirect:/moderator/organizations/pending";
     }
 
     @GetMapping("/users")
@@ -43,8 +44,8 @@ public class ModerationController {
         return "moderation/users";
     }
 
-    @PostMapping("/users/{id}/delete")
-    public String deleteUser(@PathVariable Long id) {
+    @PostMapping("/users/{id}/block")
+    public String blockUser(@PathVariable Long id) {
         moderationService.deleteUser(id);
         return "redirect:/moderator/users";
     }

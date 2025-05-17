@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
     List<Organization> findByApprovedFalse();
-
+    List<Organization> findByApprovedTrue();
     List<Organization> findByCreatedBy(Specialist specialist);
 
     @Query("SELECT o FROM Organization o JOIN o.specialists s WHERE s.id = :specialistId")

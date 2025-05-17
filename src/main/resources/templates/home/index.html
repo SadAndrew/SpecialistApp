@@ -1,3 +1,4 @@
+<!--templates/home/index.html-->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
@@ -20,14 +21,13 @@
              alt="Specialist Photo" style="height: 200px; object-fit: cover;"
              onerror="this.src='/images/default-avatar.jpg'">
         <div class="card-body">
-          <h5 class="card-title" th:text="${specialist.user.username}">Name</h5>
+          <h5 class="card-title" th:text="${specialist.username}"></h5>
           <p class="card-text"><b>Profession:</b> <span th:text="${specialist.professionType.name}"></span></p>
-          <p class="card-text" th:text="${specialist.bio}">Description</p>
-
+          <p class="card-text" th:text="${specialist.bio}"></p>
           <div class="d-grid gap-2">
-            <a th:href="@{/appointments/book(specialistId=${specialist.user.id})}"
+            <a th:href="@{/appointments/book(specialistId=${specialist.id})}"
                class="btn btn-success">Book Appointment</a>
-            <a th:href="@{/reviews/{id}(id=${specialist.user.id})}"
+            <a th:href="@{/reviews/{id}(id=${specialist.id})}"
                class="btn btn-outline-primary">Reviews</a>
           </div>
         </div>

@@ -26,32 +26,23 @@ public class SpecialistService {
         return specialistRepository.findAll();
     }
 
-    public List<Specialist> findByProfessionType(Long professionTypeId) {
-        return specialistRepository.findByProfessionTypeId(professionTypeId);
+    public List<Specialist> findAllApprovedSpecialists() {
+        return specialistRepository.findByApprovedOrganizations();
+    }
+
+    public List<Specialist> findByProfessionTypeName(String professionName) {
+        return specialistRepository.findByProfessionTypeNameAndOrganizationApprovedTrue(professionName);
     }
 
     public Specialist findById(Long id) {
         return specialistRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Specialist not found"));
     }
+
     public List<Specialist> searchSpecialists(String name, Long professionId) {
         return specialistRepository.searchSpecialists(
                 name == null || name.isEmpty() ? null : name,
                 professionId == null || professionId == 0 ? null : professionId
         );
     }
-    public List<Specialist> findAllApprovedSpecialists() {
-        return specialistRepository.findByOrganization_ApprovedTrue();
-    }
-
-    public List<Specialist> findByProfessionTypeName(String professionName) {
-        return specialistRepository.findByProfessionType_NameAndOrganization_ApprovedTrue(professionName);
-    }
-
-
-
-    public List<Specialist> findAllApproved() {
-        return specialistRepository.findAll(); // или фильтровать, если нужна проверка
-    }
-
 }

@@ -1,22 +1,16 @@
 package com.specialistapp.config;
 
-import com.specialistapp.service.CustomUserDetailsService;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 
-import java.io.IOException;
 import java.util.Set;
 
 @Configuration
@@ -28,13 +22,16 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/auth/**", "/css/**", "/js/**", "/images/**").permitAll()
+                        .requestMatchers("/", "/auth/**", "/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
+                        .requestMatchers("/moderator/**").hasRole("MODERATOR")
+                        .requestMatchers("/specialist/**").hasRole("SPECIALIST")
+                        .requestMatchers("/user/**").hasRole("USER")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/auth/login")
                         .loginProcessingUrl("/auth/login")
-                        .successHandler(customAuthenticationSuccessHandler()) // <-- вот оно
+                        .successHandler(customAuthenticationSuccessHandler())
                         .failureUrl("/auth/login?error=true")
                         .permitAll()
                 )
@@ -43,7 +40,7 @@ public class SecurityConfig {
                         .logoutSuccessUrl("/auth/login?logout")
                         .permitAll()
                 )
-                .csrf(csrf -> csrf.disable()); // временно для теста
+                .csrf(csrf -> csrf.disable()); // For testing; enable in production
 
         return http.build();
     }
@@ -57,15 +54,13 @@ public class SecurityConfig {
     public AuthenticationSuccessHandler customAuthenticationSuccessHandler() {
         return (request, response, authentication) -> {
             Set<String> roles = AuthorityUtils.authorityListToSet(authentication.getAuthorities());
-
             if (roles.contains("ROLE_SPECIALIST")) {
                 response.sendRedirect("/specialist/schedule");
             } else if (roles.contains("ROLE_MODERATOR")) {
                 response.sendRedirect("/moderator/organizations/pending");
             } else {
-                response.sendRedirect("/"); // Regular users go to home
+                response.sendRedirect("/");
             }
         };
     }
-
 }

@@ -1,0 +1,43 @@
+<!--templates/moderation/organizations.html-->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Moderation - Organizations</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+</head>
+<body>
+<div class="container mt-5">
+  <h2>Pending Organizations</h2>
+
+  <div th:if="${organizations.isEmpty()}">
+    <p>No pending organizations to review.</p>
+  </div>
+
+  <table class="table" th:if="${!organizations.isEmpty()}">
+    <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Creator</th>
+      <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="org : ${organizations}">
+      <td th:text="${org.name}"></td>
+      <td th:text="${org.description}"></td>
+      <td th:text="${org.createdBy.username}"></td>
+      <td>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/approve'}" method="post" style="display:inline">
+          <button class="btn btn-success btn-sm" type="submit">Approve</button>
+        </form>
+        <form th:action="@{'/moderator/organizations/' + ${org.id} + '/reject'}" method="post" style="display:inline">
+          <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+        </form>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

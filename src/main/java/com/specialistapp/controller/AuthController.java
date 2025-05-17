@@ -5,6 +5,8 @@ import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.model.entity.User;
 import com.specialistapp.service.ProfessionTypeService;
 import com.specialistapp.service.RegistrationService;
+import com.specialistapp.service.SpecialistService;
+import com.specialistapp.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -113,6 +115,3 @@ public class AuthController {
         }
     }
 }
-
-
-

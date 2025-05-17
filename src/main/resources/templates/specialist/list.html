@@ -1,26 +1,29 @@
+<!--templates/specialist/list.html-->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-  <title>Специалисты</title>
+  <title>Specialists</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
 </head>
 <body>
 <div class="container mt-5">
-  <h2>Список специалистов</h2>
-  <div class="row">
-    <div class="col-12" th:if="${specialists.isEmpty()}">
-      <p>Нет зарегистрированных специалистов.</p>
-    </div>
-    <div class="col-md-4 mb-3" th:each="spec : ${specialists}">
+  <h2>Specialists</h2>
+  <div class="row" th:if="${not #lists.isEmpty(specialists)}">
+    <div class="col-md-4 mb-4" th:each="specialist : ${specialists}">
       <div class="card h-100">
-        <img th:src="${spec.photoUrl}" class="card-img-top" alt="Фото" style="height: 200px; object-fit: cover;">
+        <img th:src="@{${specialist.photoUrl}}" class="card-img-top"
+             alt="Specialist Photo" style="height: 200px; object-fit: cover;"
+             onerror="this.src='/images/default-avatar.jpg'">
         <div class="card-body">
-          <h5 class="card-title" th:text="${spec.username}"></h5>
-          <p class="card-text" th:text="${spec.professionType.name}"></p>
-          <a th:href="@{'/specialist/' + ${spec.id}}" class="btn btn-primary w-100">Посмотреть профиль</a>
+          <h5 class="card-title" th:text="${specialist.username}"></h5>
+          <p class="card-text"><b>Profession:</b> <span th:text="${specialist.professionType.name}"></span></p>
+          <a th:href="@{/specialist/{id}(id=${specialist.id})}" class="btn btn-primary">View Profile</a>
         </div>
       </div>
     </div>
+  </div>
+  <div th:if="${#lists.isEmpty(specialists)}" class="alert alert-info">
+    No specialists available.
   </div>
 </div>
 </body>

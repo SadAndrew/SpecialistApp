@@ -35,8 +35,7 @@ public class SpecialistController {
     @GetMapping("/schedule")
     public String getSchedule(Model model, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
-        model.addAttribute("appointments",
-                appointmentService.getSpecialistAppointments(specialist));
+        model.addAttribute("appointments", appointmentService.getSpecialistAppointments(specialist));
         return "specialist/schedule";
     }
 
@@ -46,30 +45,33 @@ public class SpecialistController {
         return "specialist/organization-create";
     }
 
-
     @PostMapping("/organization/create")
     public String createOrganization(@ModelAttribute Organization organization, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
         organization.setCreatedBy(specialist);
-        organization.setApproved(false); // требует модерации
+        organization.setApproved(false);
         organizationService.saveOrganization(organization);
         return "redirect:/specialist/schedule";
     }
 
-    @GetMapping("/register/specialist")
-    public String showSpecialistRegistrationForm(Model model) {
-        model.addAttribute("specialist", new Specialist()); // 
-        return "auth/register-specialist";
+    @GetMapping("/organization/{id}/invite")
+    public String showInviteSpecialistForm(@PathVariable Long id, Model model) {
+        Organization organization = organizationService.getOrganizationById(id);
+        model.addAttribute("organization", organization);
+        model.addAttribute("specialists", specialistService.findAll());
+        return "specialist/invite-specialist";
     }
-    @GetMapping("/specialists/find")
-    public String findSpecialists(Model model) {
-        model.addAttribute("title", "Поиск специалистов");
-        model.addAttribute("content", "specialists/find");
-        return "fragments/layout";
+
+    @PostMapping("/organization/{id}/invite")
+    public String inviteSpecialist(@PathVariable Long id, @RequestParam Long specialistId, Principal principal) {
+        Specialist inviter = specialistService.findByEmail(principal.getName());
+        organizationService.inviteSpecialist(id, specialistId, inviter.getId());
+        return "redirect:/specialist/schedule";
     }
+
     @GetMapping("/list")
     public String listSpecialists(Model model) {
-        List<Specialist> specialists = specialistService.findAllApproved();
+        List<Specialist> specialists = specialistService.findAllApprovedSpecialists();
         model.addAttribute("specialists", specialists);
         return "specialists/list";
     }
@@ -81,6 +83,7 @@ public class SpecialistController {
         model.addAttribute("reviews", reviewService.findBySpecialist(specialist));
         return "specialists/profile";
     }
+
     @PostMapping("/appointments/confirm")
     public String confirmAppointment(@RequestParam Long appointmentId) {
         appointmentService.confirmAppointment(appointmentId);
@@ -92,5 +95,4 @@ public class SpecialistController {
         appointmentService.rejectAppointment(appointmentId);
         return "redirect:/specialist/schedule";
     }
-
 }

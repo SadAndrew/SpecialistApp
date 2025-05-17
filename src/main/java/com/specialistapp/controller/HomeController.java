@@ -18,7 +18,6 @@ public class HomeController {
     @GetMapping("/")
     public String index(@RequestParam(value = "profession", required = false) String profession,
                         Model model) {
-
         List<Specialist> specialists = (profession != null && !profession.isEmpty())
                 ? specialistService.findByProfessionTypeName(profession)
                 : specialistService.findAllApprovedSpecialists();
@@ -27,7 +26,6 @@ public class HomeController {
         model.addAttribute("selectedProfession", profession);
         model.addAttribute("title", "Home");
         model.addAttribute("content", "home/index");
-
         return "fragments/layout";
     }
 }

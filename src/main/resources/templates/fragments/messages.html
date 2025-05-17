@@ -1,3 +1,4 @@
+<!--templates/fragments/messages.html-->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <body>
@@ -5,13 +6,6 @@
   <!-- Global errors (not form-bound) -->
   <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
   <div th:if="${message}" class="alert alert-success" th:text="${message}"></div>
-
-  <!-- Form errors (will only show when inside a form with th:object) -->
-  <!-- <div th:if="${#fields != null and #fields.hasErrors('*')}" class="alert alert-danger">
-     <ul>
-       <li th:each="err : ${#fields.errors('*')}" th:text="${err}"></li>
-     </ul>
-   </div>-->
 </div>
 </body>
 </html>

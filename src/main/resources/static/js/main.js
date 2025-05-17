@@ -1,3 +1,4 @@
+// static/js/main.js
 document.addEventListener('DOMContentLoaded', function() {
     // Time slot selection
     document.querySelectorAll('.time-slot').forEach(slot => {
@@ -20,4 +21,4 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-});
+})
