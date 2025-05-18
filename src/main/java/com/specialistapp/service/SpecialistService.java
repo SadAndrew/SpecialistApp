@@ -45,4 +45,7 @@ public class SpecialistService {
                 professionId == null || professionId == 0 ? null : professionId
         );
     }
+    public Specialist save(Specialist specialist) {
+        return specialistRepository.save(specialist);
+    }
 }

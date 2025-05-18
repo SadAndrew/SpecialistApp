@@ -14,6 +14,7 @@ public class Specialist extends User {
     private String photoUrl;
     private String workSchedule;
 
+    private boolean approved = false;
     @ManyToOne
     @JoinColumn(name = "profession_type_id")
     private ProfessionType professionType;
@@ -39,5 +40,17 @@ public class Specialist extends User {
             role = "ROLE_SPECIALIST";
         }
         super.setRole(role);
+    }
+
+    public void addOrganization(Organization organization) {
+        this.organizations.add(organization);
+        organization.getSpecialists().add(this);
+    }
+    public boolean isApproved() {
+        return approved;
+    }
+
+    public void setApproved(boolean approved) {
+        this.approved = approved;
     }
 }

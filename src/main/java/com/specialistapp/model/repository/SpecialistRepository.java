@@ -11,11 +11,11 @@ public interface SpecialistRepository extends JpaRepository<Specialist, Long> {
     @Query("SELECT s FROM Specialist s WHERE s.professionType.id = :professionTypeId")
     List<Specialist> findByProfessionTypeId(@Param("professionTypeId") Long professionTypeId);
 
-    @Query("SELECT s FROM Specialist s JOIN s.organizations o WHERE o.approved = true")
+    @Query("SELECT DISTINCT s FROM Specialist s LEFT JOIN s.organizations o WHERE s.approved = true OR (o.approved = true AND o.blocked = false)")
     List<Specialist> findByApprovedOrganizations();
 
     @Query("SELECT s FROM Specialist s JOIN s.organizations o WHERE o.approved = true AND " +
-            "(:name IS NULL OR LOWER(s.username) LIKE LOWER(CONCAT('%', :name, '%'))) " +
+            "(:name IS NULL OR LOWER(s.username) LIKE LOWER(CAST(CONCAT('%', :name, '%') AS string))) " +
             "AND (:professionId IS NULL OR s.professionType.id = :professionId)")
     List<Specialist> searchSpecialists(@Param("name") String name, @Param("professionId") Long professionTypeId);
 

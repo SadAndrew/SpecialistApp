@@ -46,7 +46,25 @@ public class ModerationController {
 
     @PostMapping("/users/{id}/block")
     public String blockUser(@PathVariable Long id) {
-        moderationService.deleteUser(id);
+        moderationService.blockUser(id);
         return "redirect:/moderator/users";
+    }
+
+    @PostMapping("/users/{id}/unblock")
+    public String unblockUser(@PathVariable Long id) {
+        moderationService.unblockUser(id);
+        return "redirect:/moderator/users";
+    }
+
+    @PostMapping("/organizations/{id}/block")
+    public String blockOrganization(@PathVariable Long id) {
+        organizationService.blockOrganization(id);
+        return "redirect:/moderator/organizations/pending";
+    }
+
+    @PostMapping("/organizations/{id}/unblock")
+    public String unblockOrganization(@PathVariable Long id) {
+        organizationService.unblockOrganization(id);
+        return "redirect:/moderator/organizations/pending";
     }
 }

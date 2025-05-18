@@ -14,7 +14,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true)
+    @Column(unique = true, columnDefinition = "varchar(20)")
     @NotBlank(message = "Username is required")
     @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
     private String username;
@@ -23,10 +23,11 @@ public class User {
     @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
     private String email;
+
     @Column(nullable = false)
     private boolean blocked = false;
 
-       @Column(unique = true)
+    @Column(unique = true)
     private String phone;
 
     @NotBlank(message = "Password is required")
@@ -35,7 +36,7 @@ public class User {
     private String role;
     private String telegramId;
 
-    // Getters и Setters
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -81,7 +82,6 @@ public class User {
     public boolean isBlocked() {
         return blocked;
     }
-
     public void setBlocked(boolean blocked) {
         this.blocked = blocked;
     }

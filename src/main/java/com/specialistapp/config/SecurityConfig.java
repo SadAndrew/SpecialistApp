@@ -26,6 +26,7 @@ public class SecurityConfig {
                         .requestMatchers("/moderator/**").hasRole("MODERATOR")
                         .requestMatchers("/specialist/**").hasRole("SPECIALIST")
                         .requestMatchers("/user/**").hasRole("USER")
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

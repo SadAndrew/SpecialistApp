@@ -36,23 +36,16 @@ public class RegistrationService {
 
     @Transactional
     public Specialist registerSpecialist(Specialist specialist) {
-        // Проверка уникальности
         if (userRepository.findByEmail(specialist.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email уже используется");
         }
         if (userRepository.findByUsername(specialist.getUsername()).isPresent()) {
             throw new IllegalArgumentException("Имя пользователя уже занято");
         }
-
-        // Установка роли и шифрование пароля
         specialist.setRole("ROLE_SPECIALIST");
         specialist.setPassword(passwordEncoder.encode(specialist.getPassword()));
-
-        // Сохранение
+        specialist.setApproved(false); // Default to not approved
         Specialist savedSpecialist = specialistRepository.save(specialist);
-        System.out.println("Зарегистрирован специалист: " + savedSpecialist);
-        System.out.println("Роль: " + savedSpecialist.getRole());
-
         return savedSpecialist;
     }
 }

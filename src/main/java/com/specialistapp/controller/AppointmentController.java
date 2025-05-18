@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Controller
 @RequestMapping("/appointments")
@@ -29,28 +30,40 @@ public class AppointmentController {
     @Autowired
     private UserService userService;
 
-    @GetMapping("/book/{specialistId}")
-    public String showBookingForm(@PathVariable Long specialistId, Model model) {
-        Specialist specialist = specialistService.findById(specialistId);
-        model.addAttribute("specialist", specialist);
-        model.addAttribute("appointment", new Appointment());
-        return "appointments/book";
+    @GetMapping("/book")
+    public String showBookingForm(@RequestParam Long specialistId, Model model) {
+        try {
+            Specialist specialist = specialistService.findById(specialistId);
+            model.addAttribute("specialist", specialist);
+            return "appointments/book";
+        } catch (Exception e) {
+            return "redirect:/error?message=Specialist not found";
+        }
     }
 
     @PostMapping("/book")
-    public String bookAppointment(@ModelAttribute Appointment appointment,
-                                  @RequestParam Long specialistId,
+    public String bookAppointment(@RequestParam Long specialistId,
+                                  @RequestParam String appointmentDate,
                                   Principal principal,
                                   Model model) {
-        User user = userService.findByEmail(principal.getName());
-        Specialist specialist = specialistService.findById(specialistId);
+        try {
+            User user = userService.findByEmail(principal.getName());
+            Specialist specialist = specialistService.findById(specialistId);
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
+            LocalDateTime dateTime = LocalDateTime.parse(appointmentDate, formatter);
 
-        appointment.setUser(user);
-        appointment.setSpecialist(specialist);
-        appointment.setStatus("PENDING");
+            Appointment appointment = new Appointment();
+            appointment.setUser(user);
+            appointment.setSpecialist(specialist);
+            appointment.setAppointmentDate(dateTime);
+            appointment.setStatus("PENDING");
 
-        appointmentService.saveAppointment(appointment);
-
-        return "redirect:/user/appointments?booked";
+            appointmentService.saveAppointment(appointment);
+            return "redirect:/user/appointments?success";
+        } catch (Exception e) {
+            model.addAttribute("error", "Ошибка при записи: " + e.getMessage());
+            model.addAttribute("specialist", specialistService.findById(specialistId));
+            return "appointments/book";
+        }
     }
 }

@@ -29,7 +29,6 @@ public class AppointmentService {
         if (!isTimeSlotAvailable(specialist, time)) {
             throw new IllegalArgumentException("Time slot not available");
         }
-
         Appointment appointment = new Appointment();
         appointment.setUser(user);
         appointment.setSpecialist(specialist);

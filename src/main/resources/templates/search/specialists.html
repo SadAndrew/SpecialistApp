@@ -1,45 +1,50 @@
 <!--templates/search/specialists.html-->
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
 <head>
-    <title>Find a Specialist</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link th:href="@{/css/style.css}" rel="stylesheet">
+    <title>Specialist Schedule</title>
 </head>
 <body>
-<div class="container mt-5">
-    <h2 class="mb-4">Find a Specialist</h2>
-    <form th:action="@{/search}" method="get" class="row g-3 mb-4">
-        <div class="col-md-5">
-            <input type="text" name="name" class="form-control" placeholder="Enter name" th:value="${name}"/>
-        </div>
-        <div class="col-md-4">
-            <select name="professionId" class="form-control">
-                <option value="">All professions</option>
-                <option th:each="profession : ${professions}"
-                        th:value="${profession.id}"
-                        th:text="${profession.name}"
-                        th:selected="${professionId} == ${profession.id}">
-                </option>
-            </select>
-        </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-primary w-100">Search</button>
-        </div>
-    </form>
-    <div class="row">
-        <div class="col-md-4 mb-4" th:each="specialist : ${specialists}">
-            <div class="card specialist-card h-100">
-                <img th:src="${specialist.photoUrl}" class="card-img-top" alt="Specialist Photo" style="height: 200px; object-fit: cover;"/>
-                <div class="card-body">
-                    <h5 class="card-title specialist-name" th:text="${specialist.username}"></h5>
-                    <p class="card-text specialist-profession" th:text="${specialist.professionType.name}"></p>
-                    <p class="card-text" th:text="${specialist.bio}"></p>
-                    <a th:href="@{/appointments/book(specialistId=${specialist.id})}" class="btn btn-success w-100">Book Appointment</a>
-                </div>
-            </div>
-        </div>
+<section th:fragment="content">
+    <h2>Your Schedule</h2>
+
+    <div class="mb-3">
+        <a th:href="@{/specialist/organization/create}" class="btn btn-primary">Create Organization</a>
+        <a th:href="@{/specialist/invitations}" class="btn btn-secondary">View Invitations</a>
     </div>
-</div>
+
+    <div th:if="${appointments.isEmpty()}">
+        <p>No appointments scheduled.</p>
+    </div>
+
+    <table class="table" th:if="${!appointments.isEmpty()}">
+        <thead>
+        <tr>
+            <th>User</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="appointment : ${appointments}">
+            <td th:text="${appointment.user.username}"></td>
+            <td th:text="${#temporals.format(appointment.appointmentDate, 'yyyy-MM-dd HH:mm')}"></td>
+            <td th:text="${appointment.status}"></td>
+            <td>
+                <form th:action="@{/specialist/appointments/confirm}" method="post" style="display:inline">
+                    <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
+                    <button class="btn btn-success btn-sm" type="submit">Confirm</button>
+                </form>
+                <form th:action="@{/specialist/appointments/reject}" method="post" style="display:inline">
+                    <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
+                    <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</section>
 </body>
 </html>

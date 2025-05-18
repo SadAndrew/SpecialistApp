@@ -17,13 +17,13 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        System.out.println("Попытка входа с: " + usernameOrEmail);
-
         User user = userRepository.findByEmail(usernameOrEmail)
                 .orElse(userRepository.findByUsername(usernameOrEmail)
                         .orElseThrow(() -> new UsernameNotFoundException("Пользователь не найден")));
 
-        System.out.println("Найден пользователь: " + user.getEmail() + " с ролью: " + user.getRole());
+        if (user.isBlocked()) {
+            throw new UsernameNotFoundException("User is blocked");
+        }
 
         if (user.getRole() == null) {
             throw new UsernameNotFoundException("Роль пользователя не определена");

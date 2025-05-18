@@ -11,13 +11,8 @@
 
   <form th:action="@{'/specialist/organization/' + ${organization.id} + '/invite'}" method="post">
     <div class="mb-3">
-      <label class="form-label">Select Specialist</label>
-      <select name="specialistId" class="form-control" required>
-        <option value="">Select a specialist</option>
-        <option th:each="specialist : ${specialists}"
-                th:value="${specialist.id}"
-                th:text="${specialist.username} + ' (' + ${specialist.professionType.name} + ')'"></option>
-      </select>
+      <label class="form-label">Specialist Email</label>
+      <input type="email" name="email" class="form-control" required/>
     </div>
     <button type="submit" class="btn btn-primary">Invite</button>
   </form>

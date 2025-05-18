@@ -11,6 +11,7 @@ public class Organization {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private boolean blocked = false;
     private String name;
     private String description;
     private String logoUrl;
@@ -43,4 +44,12 @@ public class Organization {
     public void setCreatedBy(Specialist createdBy) { this.createdBy = createdBy; }
     public List<Specialist> getSpecialists() { return specialists; }
     public void setSpecialists(List<Specialist> specialists) { this.specialists = specialists; }
+
+    public boolean isBlocked() {
+        return blocked;
+    }
+
+    public void setBlocked(boolean blocked) {
+        this.blocked = blocked;
+    }
 }

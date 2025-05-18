@@ -63,9 +63,13 @@ public class SpecialistController {
     }
 
     @PostMapping("/organization/{id}/invite")
-    public String inviteSpecialist(@PathVariable Long id, @RequestParam Long specialistId, Principal principal) {
+    public String inviteSpecialist(@PathVariable Long id, @RequestParam String email, Principal principal) {
         Specialist inviter = specialistService.findByEmail(principal.getName());
-        organizationService.inviteSpecialist(id, specialistId, inviter.getId());
+        Specialist invitee = specialistService.findByEmail(email);
+        if (invitee == null) {
+            throw new IllegalArgumentException("Specialist with email " + email + " not found");
+        }
+        organizationService.inviteSpecialist(id, invitee.getId(), inviter.getId());
         return "redirect:/specialist/schedule";
     }
 
