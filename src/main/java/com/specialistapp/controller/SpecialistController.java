@@ -1,5 +1,6 @@
 package com.specialistapp.controller;
 
+import com.specialistapp.model.entity.Appointment;
 import com.specialistapp.model.entity.Organization;
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.service.AppointmentService;
@@ -35,7 +36,8 @@ public class SpecialistController {
     @GetMapping("/schedule")
     public String getSchedule(Model model, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
-        model.addAttribute("appointments", appointmentService.getSpecialistAppointments(specialist));
+        List<Appointment> appointments = appointmentService.getSpecialistAppointments(specialist);
+        model.addAttribute("appointments", appointments);
         return "specialist/schedule";
     }
 

@@ -1,7 +1,7 @@
 <!--templates/specialist/schedule.html-->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
+      th:replace="~{fragments/layout :: layout('Your Schedule', ~{::section})}">
 <head>
   <title>Specialist Schedule</title>
 </head>
@@ -12,9 +12,11 @@
     <a th:href="@{/specialist/organization/create}" class="btn btn-primary">Create Organization</a>
     <a th:href="@{/specialist/invitations}" class="btn btn-secondary">View Invitations</a>
   </div>
+
   <div th:if="${appointments.isEmpty()}">
     <p>No appointments scheduled.</p>
   </div>
+
   <table class="table" th:if="${!appointments.isEmpty()}">
     <thead>
     <tr>

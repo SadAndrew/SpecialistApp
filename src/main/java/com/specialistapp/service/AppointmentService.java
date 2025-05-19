@@ -65,7 +65,7 @@ public class AppointmentService {
                 .collect(Collectors.toList());
     }
 
-    private boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time) {
+    public boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time) {
         List<Appointment> conflicting = appointmentRepository
                 .findBySpecialistAndAppointmentDateBetween(
                         specialist,
@@ -75,7 +75,7 @@ public class AppointmentService {
         return conflicting.isEmpty();
     }
 
-    private boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time,
+    public boolean isTimeSlotAvailable(Specialist specialist, LocalDateTime time,
                                         List<Appointment> existingAppointments) {
         return existingAppointments.stream()
                 .noneMatch(appt -> isOverlapping(appt.getAppointmentDate(), time));

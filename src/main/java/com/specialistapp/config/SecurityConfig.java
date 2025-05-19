@@ -10,6 +10,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import java.util.Set;
 
@@ -26,7 +27,6 @@ public class SecurityConfig {
                         .requestMatchers("/moderator/**").hasRole("MODERATOR")
                         .requestMatchers("/specialist/**").hasRole("SPECIALIST")
                         .requestMatchers("/user/**").hasRole("USER")
-                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
@@ -41,7 +41,7 @@ public class SecurityConfig {
                         .logoutSuccessUrl("/auth/login?logout")
                         .permitAll()
                 )
-                .csrf(csrf -> csrf.disable()); // For testing; enable in production
+                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));
 
         return http.build();
     }

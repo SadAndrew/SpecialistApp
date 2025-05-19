@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Controller
 @RequestMapping("/appointments")
@@ -34,7 +35,10 @@ public class AppointmentController {
     public String showBookingForm(@RequestParam Long specialistId, Model model) {
         try {
             Specialist specialist = specialistService.findById(specialistId);
+            List<LocalDateTime> availableSlots = appointmentService.findAvailableSlots(specialist);
+
             model.addAttribute("specialist", specialist);
+            model.addAttribute("availableSlots", availableSlots); // Добавляем слоты в модель
             return "appointments/book";
         } catch (Exception e) {
             return "redirect:/error?message=Specialist not found";
@@ -51,6 +55,11 @@ public class AppointmentController {
             Specialist specialist = specialistService.findById(specialistId);
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
             LocalDateTime dateTime = LocalDateTime.parse(appointmentDate, formatter);
+
+            // Проверка доступности времени
+            if (!appointmentService.isTimeSlotAvailable(specialist, dateTime)) {
+                throw new IllegalArgumentException("Это время уже занято");
+            }
 
             Appointment appointment = new Appointment();
             appointment.setUser(user);

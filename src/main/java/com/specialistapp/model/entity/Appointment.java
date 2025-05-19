@@ -74,6 +74,12 @@ public class Appointment {
         this.confirmed = confirmed;
     }
 
-    public void setStatus(String pending) {
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getStatus() {
+        return status;
     }
 }

@@ -40,3 +40,13 @@
 .btn-warning:hover {
     background-color: #e0a800;
 }
+.time-slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 5px;
+}
+
+.time-slot.selected {
+    background-color: #0d6efd;
+    color: white;
+}
