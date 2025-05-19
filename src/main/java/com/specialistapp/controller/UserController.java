@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.security.Principal;
@@ -38,5 +40,9 @@ public class UserController {
                 appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
         return "user/appointments";
     }
-
+    @PostMapping("/appointments/{id}/cancel")
+    public String cancelAppointment(@PathVariable Long id) {
+        appointmentService.cancelAppointment(id);
+        return "redirect:/user/appointments";
+    }
 }

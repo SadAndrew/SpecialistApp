@@ -4,8 +4,11 @@ import com.specialistapp.model.entity.Appointment;
 import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.model.entity.User;
 import com.specialistapp.model.repository.AppointmentRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -24,6 +27,7 @@ public class AppointmentService {
 
     @Autowired
     private AppointmentRepository appointmentRepository;
+
 
     public Appointment createAppointment(User user, Specialist specialist, LocalDateTime time) {
         if (!isTimeSlotAvailable(specialist, time)) {
@@ -100,15 +104,24 @@ public class AppointmentService {
         appointmentRepository.save(appointment);
     }
 
+    @Transactional
     public void confirmAppointment(Long id) {
-        Appointment app = appointmentRepository.findById(id).orElseThrow();
+        Appointment app = appointmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+        app.setStatus("CONFIRMED");
         app.setConfirmed(true);
-        appointmentRepository.save(app);
     }
 
+    @Transactional
     public void rejectAppointment(Long id) {
+        Appointment app = appointmentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+        app.setStatus("REJECTED");
+    }
+
+
+    public void cancelAppointment(Long id) {
         appointmentRepository.deleteById(id);
     }
-
 
 }

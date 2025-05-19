@@ -26,6 +26,11 @@
       <td th:text="${a.specialist.username}"></td>
       <td th:text="${#temporals.format(a.appointmentDate, 'yyyy-MM-dd HH:mm')}"></td>
       <td th:text="${a.status}"></td>
+      <td>
+        <form th:action="@{'/user/appointments/' + ${a.id} + '/cancel'}" method="post">
+          <button class="btn btn-danger btn-sm">Отменить</button>
+        </form>
+      </td>
     </tr>
     </tbody>
   </table>

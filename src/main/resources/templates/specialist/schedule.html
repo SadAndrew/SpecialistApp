@@ -3,47 +3,82 @@
 <html xmlns:th="http://www.thymeleaf.org"
       th:replace="~{fragments/layout :: layout('Your Schedule', ~{::section})}">
 <head>
-  <title>Specialist Schedule</title>
+  <title>Your Schedule</title>
+  <link th:href="@{/css/style.css}" rel="stylesheet">
 </head>
 <body>
 <section>
-  <h2>Your Schedule</h2>
-  <div class="mb-3">
-    <a th:href="@{/specialist/organization/create}" class="btn btn-primary">Create Organization</a>
-    <a th:href="@{/specialist/invitations}" class="btn btn-secondary">View Invitations</a>
-  </div>
+  <div class="container mt-5">
+    <div class="card shadow-lg">
+      <div class="card-header bg-primary text-white">
+        <h3 class="mb-0">Your Schedule</h3>
+      </div>
 
-  <div th:if="${appointments.isEmpty()}">
-    <p>No appointments scheduled.</p>
-  </div>
+      <div class="card-body">
+        <div class="mb-4 d-flex justify-content-between align-items-center">
+          <div>
+            <a th:href="@{/specialist/organization/create}"
+               class="btn btn-success me-2">
+              <i class="bi bi-building"></i> Create Organization
+            </a>
+            <a th:href="@{/specialist/invitations}"
+               class="btn btn-outline-primary">
+              <i class="bi bi-people"></i> View Invitations
+            </a>
+          </div>
+          <a th:href="@{/specialist/organization/invite}"
+             class="btn btn-warning">
+            <i class="bi bi-person-plus"></i> Invite Specialist
+          </a>
+        </div>
 
-  <table class="table" th:if="${!appointments.isEmpty()}">
-    <thead>
-    <tr>
-      <th>User</th>
-      <th>Date</th>
-      <th>Status</th>
-      <th>Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr th:each="appointment : ${appointments}">
-      <td th:text="${appointment.user.username}"></td>
-      <td th:text="${#temporals.format(appointment.appointmentDate, 'yyyy-MM-dd HH:mm')}"></td>
-      <td th:text="${appointment.status}"></td>
-      <td>
-        <form th:action="@{/specialist/appointments/confirm}" method="post" style="display:inline">
-          <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
-          <button class="btn btn-success btn-sm" type="submit">Confirm</button>
-        </form>
-        <form th:action="@{/specialist/appointments/reject}" method="post" style="display:inline">
-          <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
-          <button class="btn btn-danger btn-sm" type="submit">Reject</button>
-        </form>
-      </td>
-    </tr>
-    </tbody>
-  </table>
+        <div th:if="${appointments.isEmpty()}" class="alert alert-info">
+          No appointments found.
+        </div>
+
+        <div th:if="${!appointments.isEmpty()}" class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+            <tr>
+              <th>User</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="appointment : ${appointments}">
+              <td th:text="${appointment.user.username}"></td>
+              <td th:text="${#temporals.format(appointment.appointmentDate, 'dd.MM.yyyy HH:mm')}"></td>
+              <td>
+                                    <span th:class="${appointment.status == 'CONFIRMED'} ?
+                                          'badge bg-success' : 'badge bg-warning'"
+                                          th:text="${appointment.status}">
+                                    </span>
+              </td>
+              <td>
+                <div class="d-flex gap-2">
+                  <form th:action="@{/specialist/appointments/confirm}" method="post">
+                    <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
+                    <button type="submit" class="btn btn-sm btn-success">
+                      Confirm
+                    </button>
+                  </form>
+                  <form th:action="@{/specialist/appointments/reject}" method="post">
+                    <input type="hidden" name="appointmentId" th:value="${appointment.id}"/>
+                    <button type="submit" class="btn btn-sm btn-danger">
+                      Reject
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 </body>
 </html>

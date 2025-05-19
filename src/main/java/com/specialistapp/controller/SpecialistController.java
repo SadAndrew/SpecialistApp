@@ -101,4 +101,11 @@ public class SpecialistController {
         appointmentService.rejectAppointment(appointmentId);
         return "redirect:/specialist/schedule";
     }
+
+    @GetMapping("/organization/invite")
+    public String showInviteForm(Model model, Principal principal) {
+        model.addAttribute("organizations", organizationService.getOrganizationsByCurrentSpecialist(principal));
+        model.addAttribute("specialists", specialistService.findAll());
+        return "specialist/invite-form";
+    }
 }

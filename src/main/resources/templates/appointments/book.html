@@ -34,7 +34,7 @@
         <div th:each="slot : ${availableSlots}"
              class="time-slot btn btn-outline-primary"
              onclick="selectTimeSlot(this)"
-             th:data-time="${#temporals.format(slot, 'yyyy-MM-dd\'T\'HH:mm')}"
+             th:data-time="${#temporals.format(slot, 'yyyy-MM-dd''T''HH:mm')}"
              th:text="${#temporals.format(slot, 'dd.MM.yyyy HH:mm')}">
         </div>
       </div>
@@ -44,7 +44,9 @@
     <input type="hidden" id="selectedTime" name="appointmentDate" required>
 
     <button type="submit" class="btn btn-success">Записаться</button>
+
   </form>
+  <a th:href="@{/}" class="btn btn-secondary mt-3">Вернуться на главную</a>
 </div>
 
 <script>

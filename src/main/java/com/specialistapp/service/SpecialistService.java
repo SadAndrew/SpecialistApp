@@ -48,4 +48,8 @@ public class SpecialistService {
     public Specialist save(Specialist specialist) {
         return specialistRepository.save(specialist);
     }
+
+    public List<Specialist> findByProfessionTypeNameContainingIgnoreCase(String professionName) {
+        return specialistRepository.findByProfessionTypeNameContainingIgnoreCase(professionName);
+    }
 }

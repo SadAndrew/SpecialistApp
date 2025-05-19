@@ -32,6 +32,7 @@ public class SecurityConfig {
                 .formLogin(form -> form
                         .loginPage("/auth/login")
                         .loginProcessingUrl("/auth/login")
+                        .defaultSuccessUrl("/specialist/schedule", true)
                         .successHandler(customAuthenticationSuccessHandler())
                         .failureUrl("/auth/login?error=true")
                         .permitAll()

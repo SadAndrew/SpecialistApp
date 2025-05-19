@@ -24,4 +24,8 @@ public interface SpecialistRepository extends JpaRepository<Specialist, Long> {
 
     @Query("SELECT s FROM Specialist s JOIN s.organizations o WHERE o.approved = true AND s.professionType.name = :professionName")
     List<Specialist> findByProfessionTypeNameAndOrganizationApprovedTrue(@Param("professionName") String professionName);
+
+    @Query("SELECT s FROM Specialist s JOIN s.professionType p WHERE LOWER(p.name) LIKE LOWER(CONCAT('%', :professionName, '%'))")
+    List<Specialist> findByProfessionTypeNameContainingIgnoreCase(@Param("professionName") String professionName);
+
 }
