@@ -37,7 +37,10 @@ public class SpecialistController {
     public String getSchedule(Model model, Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
         List<Appointment> appointments = appointmentService.getSpecialistAppointments(specialist);
+        List<Organization> organizations = organizationService.getOrganizationsByCurrentSpecialist(principal);
+
         model.addAttribute("appointments", appointments);
+        model.addAttribute("organizations", organizations);
         return "specialist/schedule";
     }
 
@@ -57,29 +60,38 @@ public class SpecialistController {
     }
 
     @GetMapping("/organization/{id}/invite")
-    public String showInviteSpecialistForm(@PathVariable Long id, Model model) {
+    public String showInviteForm(
+            @PathVariable Long id,
+            Model model,
+            Principal principal
+    ) {
         Organization organization = organizationService.getOrganizationById(id);
         model.addAttribute("organization", organization);
-        model.addAttribute("specialists", specialistService.findAll());
         return "specialist/invite-specialist";
     }
 
     @PostMapping("/organization/{id}/invite")
-    public String inviteSpecialist(@PathVariable Long id, @RequestParam String email, Principal principal) {
+    public String handleInvite(
+            @PathVariable Long id,
+            @RequestParam String email,
+            Principal principal
+    ) {
         Specialist inviter = specialistService.findByEmail(principal.getName());
-        Specialist invitee = specialistService.findByEmail(email);
-        if (invitee == null) {
-            throw new IllegalArgumentException("Specialist with email " + email + " not found");
-        }
-        organizationService.inviteSpecialist(id, invitee.getId(), inviter.getId());
+        organizationService.inviteSpecialist(id, email, inviter.getId());
         return "redirect:/specialist/schedule";
+    }
+    @GetMapping("/organization/invite")
+    public String showGlobalInviteForm(Model model, Principal principal) {
+        List<Organization> organizations = organizationService.getOrganizationsByCurrentSpecialist(principal);
+        model.addAttribute("organizations", organizations);
+        return "specialist/invite-form";
     }
 
     @GetMapping("/list")
     public String listSpecialists(Model model) {
         List<Specialist> specialists = specialistService.findAllApprovedSpecialists();
         model.addAttribute("specialists", specialists);
-        return "specialists/list";
+        return "specialist/list"; // Возврат имени шаблона
     }
 
     @GetMapping("/{id}")
@@ -93,19 +105,49 @@ public class SpecialistController {
     @PostMapping("/appointments/confirm")
     public String confirmAppointment(@RequestParam Long appointmentId) {
         appointmentService.confirmAppointment(appointmentId);
-        return "redirect:/specialist/schedule";
+        return "redirect:/specialist/schedule/edit";
     }
 
     @PostMapping("/appointments/reject")
     public String rejectAppointment(@RequestParam Long appointmentId) {
         appointmentService.rejectAppointment(appointmentId);
-        return "redirect:/specialist/schedule";
+        return "redirect:/specialist/schedule/edit";
     }
 
-    @GetMapping("/organization/invite")
-    public String showInviteForm(Model model, Principal principal) {
-        model.addAttribute("organizations", organizationService.getOrganizationsByCurrentSpecialist(principal));
-        model.addAttribute("specialists", specialistService.findAll());
-        return "specialist/invite-form";
+    @PostMapping("/organization/invite")
+    public String handleInviteSpecialist(
+            @RequestParam Long organizationId,
+            @RequestParam String email, // Используйте email, а не ID
+            Principal principal
+    ) {
+        Specialist inviter = specialistService.findByEmail(principal.getName());
+        organizationService.inviteSpecialist(organizationId, email, inviter.getId());
+        return "redirect:/specialist/schedule";
     }
+    @PostMapping("/organization/{orgId}/remove/{specId}")
+    public String removeFromOrganization(
+            @PathVariable Long orgId,
+            @PathVariable Long specId
+    ) {
+        organizationService.removeSpecialist(orgId, specId);
+        return "redirect:/specialist/schedule";
+    }
+    @GetMapping("/organization/{orgId}/manage")
+    public String manageOrganization(
+            @PathVariable Long orgId,
+            Model model
+    ) {
+        Organization organization = organizationService.getOrganizationWithMembers(orgId);
+        model.addAttribute("organization", organization);
+        return "specialist/manage-organization";
+    }
+
+    @GetMapping("/schedule/edit")
+    public String editSchedule(Model model, Principal principal) {
+        Specialist specialist = specialistService.findByEmail(principal.getName());
+        List<Appointment> appointments = appointmentService.getSpecialistAppointments(specialist);
+        model.addAttribute("appointments", appointments);
+        return "specialist/schedule-edit";
+    }
+
 }

@@ -16,5 +16,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     @Query("SELECT o FROM Organization o JOIN o.specialists s WHERE s.id = :specialistId")
     List<Organization> findBySpecialistMember(@Param("specialistId") Long specialistId);
 
+    @Query("SELECT o FROM Organization o WHERE o.approved = true AND o.blocked = false")
+    List<Organization> findApprovedAndActive();
+
 
 }

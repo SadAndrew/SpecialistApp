@@ -112,3 +112,153 @@
     padding: 1.5rem;
     border-bottom: none;
 }
+
+/* Улучшенные стили для таблиц */
+.table-schedule {
+    border-collapse: separate;
+    border-spacing: 0 0.75rem;
+}
+
+.table-schedule thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    padding: 1rem;
+}
+
+.table-schedule tbody tr {
+    background-color: white;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.table-schedule tbody tr:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.table-schedule td {
+    padding: 1.25rem;
+    vertical-align: middle;
+}
+
+/* Улучшенные кнопки действий */
+.btn-action-group .btn {
+    margin: 2px;
+    min-width: 90px;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+}
+/* Улучшенные глобальные стили */
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.btn {
+    transition: all 0.2s;
+    padding: 0.5rem 1.25rem;
+}
+
+.badge {
+    letter-spacing: 0.5px;
+}
+
+.alert {
+    border-radius: 8px;
+}
+
+/* Адаптивные медиа-запросы */
+@media (max-width: 768px) {
+    .action-buttons .btn {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+    .card-title {
+        font-size: 1.1rem;
+    }
+}
+.schedule-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.card-hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border: none;
+    border-radius: 12px;
+    transition: transform 0.2s;
+}
+
+.card-hover:hover {
+    transform: translateY(-5px);
+}
+
+.table-schedule {
+    border-collapse: separate;
+    border-spacing: 0 0.75rem;
+}
+
+.table-schedule thead th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    padding: 1rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.table-schedule td {
+    padding: 1.25rem;
+    vertical-align: middle;
+    color: #333;
+}
+
+.table-schedule tbody tr {
+    background-color: #fff;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.table-schedule tbody tr:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Стили для вкладок */
+.nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+    padding: 0.75rem 1.5rem;
+    color: #495057;
+    font-weight: 500;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s;
+}
+
+.nav-tabs .nav-link:hover {
+    background-color: #f1f3f5;
+    color: #0d6efd;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #fff;
+    color: #0d6efd;
+    border: 2px solid #dee2e6;
+    border-bottom: none;
+}
+
+.tab-content {
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 0 8px 8px 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Иконки в кнопках */
+.btn i {
+    vertical-align: middle;
+}

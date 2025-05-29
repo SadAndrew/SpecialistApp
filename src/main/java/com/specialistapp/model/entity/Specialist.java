@@ -14,6 +14,11 @@ public class Specialist extends User {
     private String photoUrl;
     private String workSchedule;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id")
+    private Organization organization;
+
+    private boolean blocked;
     private boolean approved = false;
     @ManyToOne
     @JoinColumn(name = "profession_type_id")
@@ -53,4 +58,9 @@ public class Specialist extends User {
     public void setApproved(boolean approved) {
         this.approved = approved;
     }
+
+    public boolean isBlocked() { return blocked; }
+    public void setBlocked(boolean blocked) { this.blocked = blocked; }
+    public Organization getOrganization() { return organization; }
+    public void setOrganization(Organization organization) { this.organization = organization; }
 }

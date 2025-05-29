@@ -1,5 +1,7 @@
 package com.specialistapp.config;
 
+import com.specialistapp.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -9,6 +11,7 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
@@ -19,11 +22,14 @@ import java.util.Set;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    @Autowired
+    private UserService userService;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/auth/**", "/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
+                        .requestMatchers("/", "/auth/**", "/css/**", "/js/**", "/images/**").permitAll()
                         .requestMatchers("/moderator/**").hasRole("MODERATOR")
                         .requestMatchers("/specialist/**").hasRole("SPECIALIST")
                         .requestMatchers("/user/**").hasRole("USER")
@@ -31,15 +37,15 @@ public class SecurityConfig {
                 )
                 .formLogin(form -> form
                         .loginPage("/auth/login")
-                        .loginProcessingUrl("/auth/login")
-                        .defaultSuccessUrl("/specialist/schedule", true)
+                        .failureHandler(authenticationFailureHandler())
                         .successHandler(customAuthenticationSuccessHandler())
-                        .failureUrl("/auth/login?error=true")
                         .permitAll()
                 )
                 .logout(logout -> logout
                         .logoutUrl("/auth/logout")
-                        .logoutSuccessUrl("/auth/login?logout")
+                        .logoutSuccessUrl("/auth/login?logout=true") // Указываем параметр logout
+                        .invalidateHttpSession(true) // Очищаем сессию
+                        .deleteCookies("JSESSIONID") // Удаляем cookie сессии
                         .permitAll()
                 )
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()));
@@ -59,9 +65,24 @@ public class SecurityConfig {
             if (roles.contains("ROLE_SPECIALIST")) {
                 response.sendRedirect("/specialist/schedule");
             } else if (roles.contains("ROLE_MODERATOR")) {
-                response.sendRedirect("/moderator/organizations/pending");
+                response.sendRedirect("/moderator/dashboard");
+            } else if (roles.contains("ROLE_USER")) {
+                response.sendRedirect("/user/profile");
             } else {
                 response.sendRedirect("/");
+            }
+        };
+    }
+
+    @Bean
+    public AuthenticationFailureHandler authenticationFailureHandler() {
+        return (request, response, exception) -> {
+            String username = request.getParameter("username");
+            com.specialistapp.model.entity.User user = userService.findByEmail(username);
+            if (user != null && user.isBlocked()) {
+                response.sendRedirect("/auth/login?error=true&blocked=true");
+            } else {
+                response.sendRedirect("/auth/login?error=true");
             }
         };
     }

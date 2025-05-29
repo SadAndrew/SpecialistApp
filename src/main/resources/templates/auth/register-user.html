@@ -32,31 +32,31 @@
     <div class="col-md-6">
       <div class="card registration-card">
         <div class="card-header registration-header text-center py-3">
-          <h3><i class="bi bi-person-plus"></i> User Registration</h3>
+          <h3><i class="bi bi-person-plus"></i> Регистрация пользователя</h3>
         </div>
         <div class="card-body p-4">
           <form th:action="@{/auth/register/user}" method="post" th:object="${user}">
             <div class="mb-3">
-              <label for="username" class="form-label">Username</label>
+              <label for="username" class="form-label">Имя пользователь</label>
               <input type="text" class="form-control" id="username" th:field="*{username}" required>
               <small class="text-danger" th:if="${#fields.hasErrors('username')}" th:errors="*{username}"></small>
             </div>
             <div class="mb-3">
-              <label for="email" class="form-label">Email</label>
+              <label for="email" class="form-label">Электронная почта</label>
               <input type="email" class="form-control" id="email" th:field="*{email}" required>
               <small class="text-danger" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small>
             </div>
             <div class="mb-3">
-              <label for="password" class="form-label">Password</label>
+              <label for="password" class="form-label">Пароль</label>
               <input type="password" class="form-control" id="password" th:field="*{password}" required>
               <small class="text-danger" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></small>
             </div>
             <div class="d-grid gap-2">
-              <button type="submit" class="btn btn-gradient btn-lg">Register</button>
+              <button type="submit" class="btn btn-gradient btn-lg">Зарегестрироваться</button>
             </div>
           </form>
           <div class="text-center mt-3">
-            <p>Already have an account? <a th:href="@{/auth/login}" class="text-gradient">Login here</a></p>
+            <p>У вас уже есть аккаунт? <a th:href="@{/auth/login}" class="text-gradient">Войти в систему</a></p>
           </div>
         </div>
       </div>

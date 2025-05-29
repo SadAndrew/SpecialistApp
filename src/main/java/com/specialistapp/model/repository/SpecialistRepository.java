@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface SpecialistRepository extends JpaRepository<Specialist, Long> {
     @Query("SELECT s FROM Specialist s WHERE s.professionType.id = :professionTypeId")
@@ -28,4 +29,8 @@ public interface SpecialistRepository extends JpaRepository<Specialist, Long> {
     @Query("SELECT s FROM Specialist s JOIN s.professionType p WHERE LOWER(p.name) LIKE LOWER(CONCAT('%', :professionName, '%'))")
     List<Specialist> findByProfessionTypeNameContainingIgnoreCase(@Param("professionName") String professionName);
 
+    @Query("SELECT s FROM Specialist s WHERE s.email = :email")
+    Optional<Specialist> findByEmail(@Param("email") String email);
+
+    List<Specialist> findByApprovedTrue();
 }

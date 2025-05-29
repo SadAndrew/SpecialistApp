@@ -23,6 +23,8 @@ public class WebConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations("file:" + System.getProperty("user.dir") + "/uploads/");
+        registry.addResourceHandler("/css/**")
+                .addResourceLocations("classpath:/static/css/");
     }
 
     private static class LocalDateTimeFormatter implements Formatter<LocalDateTime> {
@@ -36,4 +38,5 @@ public class WebConfig implements WebMvcConfigurer {
             return DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(object);
         }
     }
+
 }

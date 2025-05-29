@@ -34,7 +34,6 @@ public class User {
     private String password;
 
     private String role;
-    private String telegramId;
 
     // Getters and Setters
     public Long getId() {
@@ -72,12 +71,6 @@ public class User {
     }
     public void setRole(String role) {
         this.role = role;
-    }
-    public String getTelegramId() {
-        return telegramId;
-    }
-    public void setTelegramId(String telegramId) {
-        this.telegramId = telegramId;
     }
     public boolean isBlocked() {
         return blocked;

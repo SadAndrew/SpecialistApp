@@ -1,6 +1,7 @@
 package com.specialistapp.service;
 
 import com.specialistapp.model.entity.Organization;
+import com.specialistapp.model.entity.Specialist;
 import com.specialistapp.model.entity.User;
 import com.specialistapp.model.repository.OrganizationRepository;
 import com.specialistapp.model.repository.UserRepository;
@@ -45,5 +46,30 @@ public class ModerationService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         user.setBlocked(false);
         userRepository.save(user);
+    }
+
+    // Опционально: методы для специалистов
+    @Transactional
+    public void blockSpecialist(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Specialist not found"));
+        if (user instanceof Specialist) {
+            user.setBlocked(true);
+            userRepository.save(user);
+        } else {
+            throw new IllegalArgumentException("User is not a Specialist");
+        }
+    }
+
+    @Transactional
+    public void unblockSpecialist(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Specialist not found"));
+        if (user instanceof Specialist) {
+            user.setBlocked(false);
+            userRepository.save(user);
+        } else {
+            throw new IllegalArgumentException("User is not a Specialist");
+        }
     }
 }

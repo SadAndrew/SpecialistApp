@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SpecialistService {
@@ -26,12 +27,11 @@ public class SpecialistService {
         return specialistRepository.findAll();
     }
 
-    public List<Specialist> findAllApprovedSpecialists() {
-        return specialistRepository.findByApprovedOrganizations();
-    }
-
     public List<Specialist> findByProfessionTypeName(String professionName) {
-        return specialistRepository.findByProfessionTypeNameAndOrganizationApprovedTrue(professionName);
+        return specialistRepository.findByProfessionTypeNameAndOrganizationApprovedTrue(professionName)
+                .stream()
+                .filter(this::isSpecialistAvailable)
+                .collect(Collectors.toList());
     }
 
     public Specialist findById(Long id) {
@@ -40,16 +40,51 @@ public class SpecialistService {
     }
 
     public List<Specialist> searchSpecialists(String name, Long professionId) {
-        return specialistRepository.searchSpecialists(
-                name == null || name.isEmpty() ? null : name,
-                professionId == null || professionId == 0 ? null : professionId
+        List<Specialist> specialists = specialistRepository.searchSpecialists(
+                name == null ? "" : name,
+                professionId
         );
+        return specialists.stream()
+                .filter(this::isSpecialistAvailable)
+                .collect(Collectors.toList());
     }
+
     public Specialist save(Specialist specialist) {
         return specialistRepository.save(specialist);
     }
 
-    public List<Specialist> findByProfessionTypeNameContainingIgnoreCase(String professionName) {
-        return specialistRepository.findByProfessionTypeNameContainingIgnoreCase(professionName);
+    public List<Specialist> findByProfessionTypeNameContainingIgnoreCase(String profession) {
+        return specialistRepository.findByProfessionTypeNameContainingIgnoreCase(profession)
+                .stream()
+                .filter(this::isSpecialistAvailable)
+                .collect(Collectors.toList());
+    }
+
+    public List<Specialist> findAllApprovedSpecialists() {
+        return specialistRepository.findByApprovedTrue()
+                .stream()
+                .filter(this::isSpecialistAvailable)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isSpecialistAvailable(Specialist specialist) {
+        // Если специалист заблокирован, сразу возвращаем false
+        if (specialist.isBlocked()) {
+            return false;
+        }
+
+        // Проверяем, одобрен ли специалист
+        if (!specialist.isApproved()) {
+            return false;
+        }
+
+        // Проверяем основную организацию (если есть)
+        if (specialist.getOrganization() != null && specialist.getOrganization().isBlocked()) {
+            return false;
+        }
+
+        // Проверяем все организации из списка organizations
+        return specialist.getOrganizations().stream()
+                .noneMatch(organization -> organization.isBlocked());
     }
 }

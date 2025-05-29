@@ -68,13 +68,15 @@ public class OrganizationService {
     }
 
     @Transactional
-    public void inviteSpecialist(Long organizationId, Long specialistId, Long inviterId) {
+    public void inviteSpecialist(Long organizationId, String email, Long inviterId) {
         Organization organization = getOrganizationById(organizationId);
         Specialist inviter = specialistService.findById(inviterId);
+        Specialist invitee = specialistService.findByEmail(email); // Ищем по email
+
+        // Проверка, что приглашающий имеет права
         if (!organization.getCreatedBy().equals(inviter)) {
-            throw new IllegalStateException("Only the organization creator can invite specialists");
+            throw new IllegalStateException("Только создатель организации может приглашать");
         }
-        Specialist invitee = specialistService.findById(specialistId);
 
         Invitation invitation = new Invitation();
         invitation.setOrganization(organization);
@@ -82,9 +84,6 @@ public class OrganizationService {
         invitation.setInvitee(invitee);
         invitation.setStatus("PENDING");
         invitationRepository.save(invitation);
-
-        // Simulate sending an email (in a real app, use a proper email service)
-        System.out.println("Email sent to " + invitee.getEmail() + " with invitation to join " + organization.getName());
     }
 
     @Transactional
@@ -103,5 +102,21 @@ public class OrganizationService {
     public List<Organization> getOrganizationsByCurrentSpecialist(Principal principal) {
         Specialist specialist = specialistService.findByEmail(principal.getName());
         return organizationRepository.findByCreatedBy(specialist);
+    }
+    @Transactional
+    public void removeSpecialist(Long orgId, Long specId) {
+        Organization org = getOrganizationById(orgId);
+        Specialist specialist = specialistService.findById(specId);
+        org.getSpecialists().remove(specialist);
+        organizationRepository.save(org);
+    }
+    public Organization getOrganizationWithMembers(Long id) {
+        return organizationRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Organization not found"));
+    }
+
+
+    public List<Organization> getAllOrganizations() {
+        return organizationRepository.findAll();
     }
 }

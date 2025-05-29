@@ -1,19 +1,13 @@
 <!--templates/moderation/organizations.html-->
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{fragments/layout :: layout('Moderation - Organizations', ~{::section})}">
-<head>
-  <title>Moderation - Organizations</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org">
 <body>
-<section>
+<div th:fragment="content">
   <h2>Pending Organizations</h2>
-
-  <div th:if="${#lists.isEmpty(organizations)}">
-    <p>No pending organizations to review.</p>
+  <div th:if="${organizations.isEmpty()}" class="alert alert-info">
+    No organizations to moderate.
   </div>
-
-  <table class="table" th:if="${not #lists.isEmpty(organizations)}">
+  <table th:if="${not organizations.isEmpty()}" class="table table-hover">
     <thead>
     <tr>
       <th>Name</th>
@@ -26,24 +20,26 @@
     <tbody>
     <tr th:each="org : ${organizations}">
       <td th:text="${org.name}"></td>
-      <td th:text="${org.description ?: 'No description'}"></td>
-      <td th:text="${org.createdBy?.username ?: 'N/A'}"></td>
+      <td th:text="${org.description}"></td>
+      <td th:text="${org.createdBy.username}"></td>
+      <td th:text="${org.blocked ? 'Blocked' : (org.approved ? 'Approved' : 'Pending')}"></td>
       <td>
-        <span th:if="${org.blocked}">Blocked</span>
-        <span th:else-if="${org.approved}">Approved</span>
-        <span th:else>Pending</span>
-      </td>
-      <td>
-        <form th:action="@{/moderator/organizations/{id}/approve(id=${org.id})}" method="post" style="display:inline">
-          <button class="btn btn-success btn-sm" type="submit">Approve</button>
+        <form th:action="@{/moderator/organizations/{id}/approve(id=${org.id})}" method="post">
+          <button type="submit" class="btn btn-success btn-sm">Approve</button>
         </form>
-        <form th:action="@{/moderator/organizations/{id}/reject(id=${org.id})}" method="post" style="display:inline">
-          <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+        <form th:action="@{/moderator/organizations/{id}/reject(id=${org.id})}" method="post">
+          <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+        </form>
+        <form th:action="@{/moderator/organizations/{id}/block(id=${org.id})}" method="post" th:if="${!org.blocked}">
+          <button type="submit" class="btn btn-warning btn-sm">Block</button>
+        </form>
+        <form th:action="@{/moderator/organizations/{id}/unblock(id=${org.id})}" method="post" th:if="${org.blocked}">
+          <button type="submit" class="btn btn-info btn-sm">Unblock</button>
         </form>
       </td>
     </tr>
     </tbody>
   </table>
-</section>
+</div>
 </body>
 </html>

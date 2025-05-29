@@ -42,8 +42,12 @@ public class HomeController {
 
         if (principal != null) {
             User user = userService.findByEmail(principal.getName());
-            model.addAttribute("userAppointments",
-                    appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
+            if (user != null && !user.isBlocked()) {
+                model.addAttribute("userAppointments",
+                        appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
+            } else {
+                return "redirect:/auth/login?error=true&blocked=true";
+            }
         }
 
         model.addAttribute("specialists", specialists);

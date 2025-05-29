@@ -1,18 +1,13 @@
 <!--templates/moderation/users.html-->
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" th:replace="~{fragments/layout :: layout(~{::title}, ~{::section})}">
-<head>
-  <title>Moderation - Users</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org">
 <body>
-<section>
+<div th:fragment="content">
   <h2>User Management</h2>
-
-  <div th:if="${users.isEmpty()}">
-    <p>No users to manage.</p>
+  <div th:if="${users.isEmpty()}" class="alert alert-info">
+    No users to manage.
   </div>
-
-  <table class="table" th:if="${!users.isEmpty()}">
+  <table th:if="${not users.isEmpty()}" class="table table-hover">
     <thead>
     <tr>
       <th>Username</th>
@@ -27,18 +22,25 @@
       <td th:text="${user.username}"></td>
       <td th:text="${user.email}"></td>
       <td th:text="${user.role}"></td>
-      <td th:text="${user.blocked} ? 'Blocked' : 'Active'"></td>
+      <td th:text="${user.blocked ? 'Blocked' : 'Active'}"></td>
       <td>
-        <form th:if="${!user.blocked}" th:action="@{'/moderator/users/' + ${user.id} + '/block'}" method="post" style="display:inline">
-          <button class="btn btn-danger btn-sm" type="submit">Block</button>
+        <form th:action="@{/moderator/users/{id}/block(id=${user.id})}" method="post" th:if="${!user.blocked}">
+          <button type="submit" class="btn btn-danger btn-sm">Block</button>
         </form>
-        <form th:if="${user.blocked}" th:action="@{'/moderator/users/' + ${user.id} + '/unblock'}" method="post" style="display:inline">
-          <button class="btn btn-success btn-sm" type="submit">Unblock</button>
+        <form th:action="@{/moderator/users/{id}/unblock(id=${user.id})}" method="post" th:if="${user.blocked}">
+          <button type="submit" class="btn btn-success btn-sm">Unblock</button>
+        </form>
+        <!-- Для специалистов -->
+        <form th:action="@{/moderator/specialists/{id}/block(id=${user.id})}" method="post" th:if="${user.role == 'ROLE_SPECIALIST' and !user.blocked}">
+          <button type="submit" class="btn btn-danger btn-sm">Block as Specialist</button>
+        </form>
+        <form th:action="@{/moderator/specialists/{id}/unblock(id=${user.id})}" method="post" th:if="${user.role == 'ROLE_SPECIALIST' and user.blocked}">
+          <button type="submit" class="btn btn-success btn-sm">Unblock as Specialist</button>
         </form>
       </td>
     </tr>
     </tbody>
   </table>
-</section>
+</div>
 </body>
 </html>

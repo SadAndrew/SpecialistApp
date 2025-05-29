@@ -25,21 +25,35 @@ public class UserController {
     private AppointmentService appointmentService;
 
     @GetMapping("/profile")
-    public String userProfile(Model model, Principal principal) {
-        User user = userService.findByEmail(principal.getName());
-        model.addAttribute("title", "Профиль");
-        model.addAttribute("content", "user/profile");
-        return "fragments/layout";
-    }
+    public String getProfile(Model model, Principal principal) {
+        if (principal == null) {
+            return "redirect:/auth/login"; // Перенаправление, если пользователь не авторизован
+        }
 
+        String email = principal.getName();
+        User user = userService.findByEmail(email);
+
+        if (user == null) {
+            model.addAttribute("error", "User not found for email: " + email);
+            return "error"; // Страница ошибки, если пользователь не найден
+        }
+
+        model.addAttribute("user", user); // Передаём объект user в модель
+        model.addAttribute("title", "User Profile"); // Устанавливаем заголовок
+        return "user/profile"; // Рендерим user/profile.html
+    }
 
     @GetMapping("/appointments")
     public String getUserAppointments(Model model, Principal principal) {
         User user = userService.findByEmail(principal.getName());
-        model.addAttribute("appointments",
-                appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
+        if (user == null) {
+            return "redirect:/auth/login";
+        }
+        model.addAttribute("appointments", appointmentService.findUpcomingByUser(user.getId(), LocalDateTime.now()));
+        model.addAttribute("title", "Your Appointments");
         return "user/appointments";
     }
+
     @PostMapping("/appointments/{id}/cancel")
     public String cancelAppointment(@PathVariable Long id) {
         appointmentService.cancelAppointment(id);
